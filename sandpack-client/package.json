@@ -45,7 +45,7 @@
     "build:bundler": "gulp",
     "format": "prettier --write '**/*.{ts,tsx,js,jsx}'",
     "format:check": "prettier --check '**/*.{ts,tsx}'",
-    "dev": "yarn build -- --watch"
+    "dev": "rollup -c --bundleConfigAsCjs --watch"
   },
   "files": [
     "dist",

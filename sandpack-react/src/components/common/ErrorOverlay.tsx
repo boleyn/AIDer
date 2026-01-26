@@ -12,7 +12,6 @@ import {
   roundedButtonClassName,
 } from "../../styles/shared";
 import { useClassNames } from "../../utils/classNames";
-import { SignInIcon } from "../icons";
 import { RestartIcon } from "../icons";
 
 const mapBundlerErrors = (originalMessage: string): string => {
@@ -43,9 +42,8 @@ export const ErrorOverlay: React.FC<ErrorOverlayProps> = (props) => {
   const { restart } = useSandpackShell();
   const classNames = useClassNames();
   const {
-    sandpack: { runSandpack, teamId },
+    sandpack: { runSandpack },
   } = useSandpack();
-  const { dispatch } = useSandpack();
 
   if (!errorMessage && !children) {
     return null;
@@ -55,12 +53,6 @@ export const ErrorOverlay: React.FC<ErrorOverlayProps> = (props) => {
   const privateDependencyError = errorMessage?.includes(
     "NPM_REGISTRY_UNAUTHENTICATED_REQUEST"
   );
-
-  const onSignIn = () => {
-    if (teamId) {
-      dispatch({ type: "sign-in", teamId });
-    }
-  };
 
   if (privateDependencyError) {
     return (
@@ -79,28 +71,9 @@ export const ErrorOverlay: React.FC<ErrorOverlayProps> = (props) => {
 
         <div className={classNames("error-message", [errorMessageClassName])}>
           <p>
-            Authentication required. Please sign in to your account (make sure
-            to allow pop-ups to this page) and try again. If the issue persists,
-            contact{" "}
-            <a href="mailto:hello@codesandbox.io?subject=Sandpack Timeout Error">
-              support
-            </a>{" "}
-            for further assistance.
+            This error occurs when trying to access a private npm package.
+            Private packages are not supported in this environment.
           </p>
-        </div>
-
-        <div>
-          <button
-            className={classNames("button", [
-              buttonClassName,
-              iconStandaloneClassName,
-              roundedButtonClassName,
-            ])}
-            onClick={onSignIn}
-          >
-            <SignInIcon />
-            <span>Sign in</span>
-          </button>
         </div>
       </div>
     );

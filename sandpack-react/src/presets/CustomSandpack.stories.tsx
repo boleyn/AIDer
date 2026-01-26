@@ -534,22 +534,33 @@ return <h1>{message}</h1>
 export const CustomNpmRegistries: React.FC = () => (
   <Sandpack
     customSetup={{
-      dependencies: { "@codesandbox/test-package": "1.0.5" },
-      npmRegistries: [
-        {
-          enabledScopes: ["@codesandbox"],
-          limitToScopes: true,
-          registryUrl: "https://xywctu-4000.preview.csb.app",
-        },
-      ],
+      dependencies: {},
     }}
     files={{
-      "/App.js": `import { Button } from "@codesandbox/test-package"
+      "/Button.js": `export const Button = ({ children, ...props }) => {
+  return (
+    <button
+      style={{
+        padding: "8px 16px",
+        backgroundColor: "#007bff",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "14px",
+      }}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};`,
+      "/App.js": `import { Button } from "./Button"
 
 export default function App() {
   return (
     <div>
-      <Button>I'm a private Package</Button>
+      <Button>I'm a custom Button component</Button>
     </div>
   )
 }
