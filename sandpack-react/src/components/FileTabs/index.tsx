@@ -181,7 +181,7 @@ export const FileTabs = ({
       {...props}
     >
       <div
-        aria-label="Select active file"
+        aria-label="选择活动文件"
         className={classNames("tabs-scrollable-container", [
           tabsScrollableClassName,
         ])}

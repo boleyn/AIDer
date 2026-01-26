@@ -95,24 +95,23 @@ export const LoadingOverlay: React.FC<
           <p
             className={classNames("error-title", [css({ fontWeight: "bold" })])}
           >
-            Couldn't connect to server
+            无法连接到服务器
           </p>
 
           <div className={classNames("error-message", [errorMessageClassName])}>
             <p>
-              This means sandpack cannot connect to the runtime or your network
-              is having some issues. Please check the network tab in your
-              browser and try again. If the problem persists, report it via{" "}
+              这意味着 sandpack 无法连接到运行时，或者您的网络出现了问题。
+              请检查浏览器中的网络标签页并重试。如果问题持续存在，请通过{" "}
               <a href="mailto:hello@codesandbox.io?subject=Sandpack Timeout Error">
-                email
+                电子邮件
               </a>{" "}
-              or submit an issue on{" "}
+              报告或提交问题到{" "}
               <a
                 href="https://github.com/codesandbox/sandpack/issues"
                 rel="noreferrer noopener"
                 target="_blank"
               >
-                GitHub.
+                GitHub。
               </a>
             </p>
           </div>
@@ -122,9 +121,9 @@ export const LoadingOverlay: React.FC<
               errorMessageClassName({ errorCode: true }),
             ])}
           >
-            ENV: {environment}
+            环境: {environment}
             <br />
-            ERROR: TIME_OUT
+            错误: 超时
           </p>
 
           <div>
@@ -136,10 +135,10 @@ export const LoadingOverlay: React.FC<
                 roundedButtonClassName,
               ])}
               onClick={runSandpack}
-              title="Restart script"
+              title="重启脚本"
               type="button"
             >
-              <RestartIcon /> <span>Try again</span>
+              <RestartIcon /> <span>重试</span>
             </button>
           </div>
         </div>

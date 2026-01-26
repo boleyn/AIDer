@@ -489,7 +489,7 @@ export const CodeMirror = React.forwardRef<CodeMirrorRef, CodeMirrorProps>(
         ref={combinedRef}
         aria-autocomplete="list"
         aria-label={
-          filePath ? `Code Editor for ${getFileName(filePath)}` : `Code Editor`
+          filePath ? `${getFileName(filePath)} 的代码编辑器` : `代码编辑器`
         }
         aria-multiline="true"
         className={classNames("cm", [

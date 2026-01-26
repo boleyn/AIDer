@@ -87,7 +87,7 @@ export const Loading = ({
   return (
     <div
       className={classNames("cube-wrapper", [wrapperClassName, className])}
-      title="Open in CodeSandbox"
+      title="在 CodeSandbox 中打开"
       {...props}
     >
       {showOpenInCodeSandbox && <OpenInCodeSandboxButton />}

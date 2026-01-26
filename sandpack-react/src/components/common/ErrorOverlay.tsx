@@ -24,10 +24,10 @@ const mapBundlerErrors = (originalMessage: string): string => {
 
     // Crash
     if (Number(exitCode[1]) === 0) {
-      return `Server is not running, would you like to start it again?`;
+      return `服务器未运行，是否要重新启动？`;
     }
 
-    return `Server has crashed with status code ${exitCode[1]}, would you like to restart the server?`;
+    return `服务器已崩溃，状态码为 ${exitCode[1]}，是否要重启服务器？`;
   }
 
   return errorMessage;
@@ -94,7 +94,7 @@ export const ErrorOverlay: React.FC<ErrorOverlayProps> = (props) => {
           <p
             className={classNames("error-title", [css({ fontWeight: "bold" })])}
           >
-            Couldn't connect to server
+            无法连接到服务器
           </p>
           <p>{mapBundlerErrors(errorMessage)}</p>
 
@@ -110,10 +110,10 @@ export const ErrorOverlay: React.FC<ErrorOverlayProps> = (props) => {
                 restart();
                 runSandpack();
               }}
-              title="Restart script"
+              title="重启脚本"
               type="button"
             >
-              <RestartIcon /> <span>Restart</span>
+              <RestartIcon /> <span>重启</span>
             </button>
           </div>
         </div>
@@ -133,7 +133,7 @@ export const ErrorOverlay: React.FC<ErrorOverlayProps> = (props) => {
       {...otherProps}
     >
       <p className={classNames("error-message", [errorMessageClassName])}>
-        <strong>Something went wrong</strong>
+        <strong>出现了问题</strong>
       </p>
 
       <p

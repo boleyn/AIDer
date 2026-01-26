@@ -81,7 +81,7 @@ export const Header: React.FC<Props> = ({
           ])}
         >
           <ConsoleIcon />
-          Tests
+          测试
         </p>
       </div>
 
@@ -94,7 +94,7 @@ export const Header: React.FC<Props> = ({
             onClick={setSuiteOnly}
             type="button"
           >
-            Suite only
+            仅套件
           </button>
         )}
         {showVerboseButton && (
@@ -105,7 +105,7 @@ export const Header: React.FC<Props> = ({
             onClick={setVerbose}
             type="button"
           >
-            Verbose
+            详细
           </button>
         )}
         {showWatchButton && (
@@ -116,7 +116,7 @@ export const Header: React.FC<Props> = ({
             onClick={setWatchMode}
             type="button"
           >
-            Watch
+            监听
           </button>
         )}
       </div>

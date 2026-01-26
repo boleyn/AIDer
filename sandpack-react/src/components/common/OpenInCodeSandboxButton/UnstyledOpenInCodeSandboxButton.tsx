@@ -93,7 +93,7 @@ export const ExportToWorkspaceButton: React.FC<
   return (
     <button
       onClick={submit}
-      title="Export to workspace in CodeSandbox"
+      title="导出到 CodeSandbox 工作区"
       type="button"
       {...props}
     >
@@ -139,7 +139,7 @@ const RegularExportButton: React.FC<
     return (
       <button
         onClick={(): void => formRef.current?.submit()}
-        title="Open in CodeSandbox"
+        title="在 CodeSandbox 中打开"
         type="button"
         {...props}
       >
@@ -174,7 +174,7 @@ const RegularExportButton: React.FC<
       }`}
       rel="noreferrer noopener"
       target="_blank"
-      title="Open in CodeSandbox"
+      title="在 CodeSandbox 中打开"
       {...props}
     >
       {children}

@@ -59,7 +59,7 @@ export const Header: React.FC<{
         ])}
       >
         <ConsoleIcon />
-        <span>Terminal</span>
+        <span>终端</span>
       </p>
 
       {node && (
@@ -70,7 +70,7 @@ export const Header: React.FC<{
             onClick={(): void => setCurrentTab("server")}
             type="button"
           >
-            Server
+            服务器
           </button>
 
           <button
@@ -79,7 +79,7 @@ export const Header: React.FC<{
             onClick={(): void => setCurrentTab("client")}
             type="button"
           >
-            Client
+            客户端
           </button>
         </div>
       )}

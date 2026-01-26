@@ -134,7 +134,7 @@ export const Navigator = ({
       {...props}
     >
       <button
-        aria-label="Go back one page"
+        aria-label="返回上一页"
         className={buttonsClassNames}
         disabled={!backEnabled}
         onClick={handleBack}
@@ -143,7 +143,7 @@ export const Navigator = ({
         <BackwardIcon />
       </button>
       <button
-        aria-label="Go forward one page"
+        aria-label="前进一页"
         className={buttonsClassNames}
         disabled={!forwardEnabled}
         onClick={handleForward}
@@ -152,7 +152,7 @@ export const Navigator = ({
         <ForwardIcon />
       </button>
       <button
-        aria-label="Refresh page"
+        aria-label="刷新页面"
         className={buttonsClassNames}
         onClick={handleRefresh}
         type="button"
@@ -161,9 +161,9 @@ export const Navigator = ({
       </button>
 
       <input
-        aria-label="Current Sandpack URL"
+        aria-label="当前 Sandpack URL"
         className={classNames("input", [inputClassName])}
-        name="Current Sandpack URL"
+        name="当前 Sandpack URL"
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         type="text"

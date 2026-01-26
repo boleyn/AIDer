@@ -97,7 +97,7 @@ export const Specs: React.FC<Props> = ({
                   failBackgroundClassName,
                 ])}
               >
-                Error
+                错误
               </SpecLabel>
               <FilePath
                 onClick={(): void => openSpec(spec.name)}
@@ -134,7 +134,7 @@ export const Specs: React.FC<Props> = ({
                       failBackgroundClassName,
                     ])}
                   >
-                    Fail
+                    失败
                   </SpecLabel>
                 ) : (
                   <SpecLabel
@@ -143,7 +143,7 @@ export const Specs: React.FC<Props> = ({
                       passBackgroundClassName,
                     ])}
                   >
-                    Pass
+                    通过
                   </SpecLabel>
                 )
               ) : (
@@ -153,7 +153,7 @@ export const Specs: React.FC<Props> = ({
                     runBackgroundClassName,
                   ])}
                 >
-                  Run
+                  运行
                 </SpecLabel>
               )}
 

@@ -43,7 +43,7 @@ const containerClassName = css({
 });
 
 export const Summary: React.FC<Props> = ({ suites, tests, duration }) => {
-  const widestLabel = "Test suites: ";
+  const widestLabel = "测试套件: ";
 
   const withMargin = (label: string): string => {
     const difference = widestLabel.length - label.length;
@@ -67,7 +67,7 @@ export const Summary: React.FC<Props> = ({ suites, tests, duration }) => {
               failTextClassName,
             ])}
           >
-            {suites.fail} failed,{" "}
+            {suites.fail} 失败,{" "}
           </span>
         )}
         {suites.pass > 0 && (
@@ -76,41 +76,41 @@ export const Summary: React.FC<Props> = ({ suites, tests, duration }) => {
               passTextClassName,
             ])}
           >
-            {suites.pass} passed,{" "}
+            {suites.pass} 通过,{" "}
           </span>
         )}
-        <span>{suites.total} total</span>
+        <span>{suites.total} 总计</span>
       </div>
       <div className={classNames("test-summary", [gapBottomClassName])}>
         <span className={classNames("test-summary-label", [labelClassName])}>
-          {withMargin("Tests:")}
+          {withMargin("测试:")}
         </span>
         {tests.fail > 0 && (
           <span
             className={classNames("test-summary-fail", [failTextClassName])}
           >
-            {tests.fail} failed,{" "}
+            {tests.fail} 失败,{" "}
           </span>
         )}
         {tests.skip > 0 && (
           <span
             className={classNames("test-summary-skip", [skipTextClassName])}
           >
-            {tests.skip} skipped,{" "}
+            {tests.skip} 跳过,{" "}
           </span>
         )}
         {tests.pass > 0 && (
           <span
             className={classNames("test-summary-pass", [passTextClassName])}
           >
-            {tests.pass} passed,{" "}
+            {tests.pass} 通过,{" "}
           </span>
         )}
-        <span>{tests.total} total</span>
+        <span>{tests.total} 总计</span>
       </div>
       <div className={classNames("test-summary-curation", [labelClassName])}>
-        {withMargin("Time:")}
-        {duration / 1000}s
+        {withMargin("时间:")}
+        {duration / 1000}秒
       </div>
     </div>
   );

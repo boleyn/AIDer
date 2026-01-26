@@ -28,7 +28,7 @@ export const RunButton: React.FC<
       {...props}
     >
       <RunIcon />
-      <span>Run</span>
+      <span>运行</span>
     </RoundedButton>
   );
 };
