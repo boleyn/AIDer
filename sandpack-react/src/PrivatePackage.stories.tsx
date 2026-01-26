@@ -3,7 +3,7 @@ import React from "react";
 import { Sandpack } from "./presets";
 
 export default {
-  title: "Private Packages",
+  title: "Intro/Private Packages",
 };
 
 export const Basic: React.FC = () => {

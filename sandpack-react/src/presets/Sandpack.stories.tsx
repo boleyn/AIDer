@@ -2,7 +2,7 @@ import { LanguageSupport, StreamLanguage } from "@codemirror/language";
 import { shell } from "@codemirror/legacy-modes/mode/shell";
 import React from "react";
 
-import { Sandpack } from "../";
+import { RemoteSandpack, Sandpack } from "../";
 import { REACT_TEMPLATE } from "../templates";
 
 export default {
@@ -358,6 +358,12 @@ Write-Output $example`,
       },
     }}
   />
+);
+
+export const RemoteGitHub: React.FC = () => (
+  <div style={{ height: "100vh" }}>
+    <RemoteSandpack />
+  </div>
 );
 
 export const RtlLayout: React.FC = () => {
