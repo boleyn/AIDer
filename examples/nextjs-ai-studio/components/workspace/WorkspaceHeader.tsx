@@ -1,6 +1,5 @@
 import { Badge, Flex, Text } from "@chakra-ui/react";
 
-import WorkspaceActions from "./WorkspaceActions";
 
 type WorkspaceHeaderProps = {
   activeView: "preview" | "code";
@@ -61,7 +60,6 @@ const WorkspaceHeader = ({ activeView, onChangeView, status, error }: WorkspaceH
           </Text>
         ) : null}
       </Flex>
-      <WorkspaceActions />
     </Flex>
   );
 };
