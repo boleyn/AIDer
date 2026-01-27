@@ -286,6 +286,9 @@ export const RemoteSandpack: React.FC<RemoteSandpackProps> = ({
   );
   const [error, setError] = React.useState<string | null>(null);
   const [showEditor, setShowEditor] = React.useState(showEditorByDefault);
+  const [activePane, setActivePane] = React.useState<"preview" | "code">(
+    "code"
+  );
 
   React.useEffect(() => {
     if (!resolvedUrl) {
@@ -420,24 +423,78 @@ export const RemoteSandpack: React.FC<RemoteSandpackProps> = ({
             >
               <SandpackFileExplorer />
             </div>
-            {showEditor ? (
-              <SandpackCodeEditor closableTabs showLineNumbers />
-            ) : (
+            <div
+              style={{
+                display: "flex",
+                flex: 1,
+                flexDirection: "column",
+                borderLeft: "1px solid #e1e1e1",
+              }}
+            >
               <div
                 style={{
-                  minWidth: 240,
-                  borderRight: "1px solid #e1e1e1",
                   display: "flex",
+                  gap: 8,
                   alignItems: "center",
-                  justifyContent: "center",
-                  color: "#666",
-                  fontSize: 13,
+                  padding: "6px 10px",
+                  borderBottom: "1px solid #e1e1e1",
+                  background: "#fafafa",
                 }}
               >
-                Click a file to open editor
+                <button
+                  type="button"
+                  onClick={() => setActivePane("preview")}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    border: "1px solid #d0d0d0",
+                    background: activePane === "preview" ? "#111" : "#fff",
+                    color: activePane === "preview" ? "#fff" : "#333",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePane("code")}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    border: "1px solid #d0d0d0",
+                    background: activePane === "code" ? "#111" : "#fff",
+                    color: activePane === "code" ? "#fff" : "#333",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  Code
+                </button>
               </div>
-            )}
-            <SandpackPreview showNavigator />
+              <div style={{ position: "relative", flex: 1 }}>
+                {activePane === "code" ? (
+                  showEditor ? (
+                    <SandpackCodeEditor closableTabs showLineNumbers />
+                  ) : (
+                    <div
+                      style={{
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#666",
+                        fontSize: 13,
+                      }}
+                    >
+                      Click a file to open editor
+                    </div>
+                  )
+                ) : (
+                  <SandpackPreview showNavigator />
+                )}
+              </div>
+            </div>
           </SandpackLayout>
         </SandpackProvider>
       ) : (

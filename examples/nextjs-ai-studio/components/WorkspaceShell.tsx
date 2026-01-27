@@ -1,0 +1,132 @@
+import {
+  SandpackCodeEditor,
+  SandpackConsole,
+  SandpackLayout,
+  SandpackPreview,
+  SandpackProvider,
+  SandpackStack,
+  type SandpackPredefinedTemplate,
+} from "@codesandbox/sandpack-react";
+import { githubLight } from "@codesandbox/sandpack-themes";
+import { Box, Flex } from "@chakra-ui/react";
+
+import type { SandpackFiles } from "./StudioShell";
+import FileExplorerPanel from "./workspace/FileExplorerPanel";
+import WorkspaceHeader from "./workspace/WorkspaceHeader";
+
+type ActiveView = "preview" | "code";
+
+type WorkspaceShellProps = {
+  template: SandpackPredefinedTemplate;
+  files: SandpackFiles;
+  customSetup?: { dependencies: Record<string, string> };
+  status: "idle" | "loading" | "ready" | "error";
+  error: string;
+  activeView: ActiveView;
+  onChangeView: (view: ActiveView) => void;
+  workspaceHeight: string;
+};
+
+const WorkspaceShell = ({
+  template,
+  files,
+  customSetup,
+  status,
+  error,
+  activeView,
+  onChangeView,
+  workspaceHeight,
+}: WorkspaceShellProps) => {
+  return (
+    <Flex
+      as="section"
+      direction="column"
+      flex="1"
+      minH="0"
+      border="1px solid"
+      borderColor="gray.200"
+      borderRadius="xl"
+      bg="whiteAlpha.900"
+      boxShadow="sm"
+      overflow="hidden"
+    >
+      <SandpackProvider
+        template={template}
+        files={files}
+        customSetup={customSetup}
+        theme={githubLight}
+        options={{
+          autorun: true,
+        }}
+      >
+        <Flex direction="column" flex="1" minH="0" h="100%">
+          <WorkspaceHeader
+            activeView={activeView}
+            onChangeView={onChangeView}
+            status={status}
+            error={error}
+          />
+          <Box
+            position="relative"
+            flex="1"
+            minH="0"
+            display="flex"
+            height={workspaceHeight}
+            minHeight={workspaceHeight}
+          >
+            <SandpackLayout
+              style={{
+                width: "100%",
+                height: workspaceHeight,
+                minHeight: workspaceHeight,
+                display: activeView === "code" ? "flex" : "none",
+              }}
+            >
+              <FileExplorerPanel />
+              <Box style={{ flex: 1, minWidth: 0, position: "relative" }}>
+                <SandpackStack
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: "100%",
+                    display: "flex",
+                  }}
+                >
+                  <SandpackCodeEditor showTabs showLineNumbers wrapContent style={{ height: workspaceHeight }} />
+                  <SandpackConsole />
+                </SandpackStack>
+              </Box>
+            </SandpackLayout>
+            <Box
+              style={{
+                flex: 1,
+                minWidth: 0,
+                position: "relative",
+                display: activeView === "preview" ? "flex" : "none",
+              }}
+            >
+              <SandpackStack
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: "100%",
+                  display: "flex",
+                }}
+              >
+                <SandpackPreview style={{ height: workspaceHeight }} />
+              </SandpackStack>
+            </Box>
+          </Box>
+        </Flex>
+      </SandpackProvider>
+    </Flex>
+  );
+};
+
+export default WorkspaceShell;

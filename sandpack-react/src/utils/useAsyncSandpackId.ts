@@ -26,17 +26,22 @@ export const useAsyncSandpackId = (files: SandpackBundlerFiles) => {
     /* eslint-disable-next-line react-hooks/rules-of-hooks */
     const reactDomId = useReactId();
     return async () => {
-      const allCode = Object.entries(files)
-        .map((path, code) => path + "|" + code)
-        .join("|||");
-      const sha = await generateShortId(
-        allCode + reactDomId + sandpackClientVersion
-      );
+      try {
+        const allCode = Object.entries(files)
+          .map((path, code) => path + "|" + code)
+          .join("|||");
+        const sha = await generateShortId(
+          allCode + reactDomId + sandpackClientVersion
+        );
 
-      return ensureLength(
-        sha.replace(/:/g, "sp").replace(/[^a-zA-Z]/g, ""),
-        MAX_ID_LENGTH
-      );
+        return ensureLength(
+          sha.replace(/:/g, "sp").replace(/[^a-zA-Z]/g, ""),
+          MAX_ID_LENGTH
+        );
+      } catch (error) {
+        // Fallback to random ID if generateShortId fails
+        return ensureLength(generateRandomId(), MAX_ID_LENGTH);
+      }
     };
   } else {
     return () => ensureLength(generateRandomId(), MAX_ID_LENGTH);
@@ -51,11 +56,43 @@ function ensureLength(str: string, length: number) {
   }
 }
 
-async function generateShortId(input: string) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(input);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
+async function generateShortId(input: string): Promise<string> {
+  // Fallback hash function
+  const fallbackHash = (str: string): string => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    // Convert to base64-like string
+    const hashStr = Math.abs(hash).toString(36);
+    return btoa(hashStr + str.slice(0, 10)).slice(0, 44);
+  };
 
-  return btoa(String.fromCharCode(...hashArray));
+  // Check if crypto.subtle is available (requires HTTPS or localhost)
+  // More strict check: verify crypto, crypto.subtle, and crypto.subtle.digest all exist
+  if (
+    typeof crypto === "undefined" ||
+    !crypto.subtle ||
+    typeof crypto.subtle.digest !== "function"
+  ) {
+    return fallbackHash(input);
+  }
+
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(input);
+    // Double-check crypto.subtle is still available before calling
+    if (!crypto.subtle || typeof crypto.subtle.digest !== "function") {
+      return fallbackHash(input);
+    }
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+
+    return btoa(String.fromCharCode(...hashArray));
+  } catch (error) {
+    // Fallback if digest fails (e.g., in non-secure contexts)
+    return fallbackHash(input);
+  }
 }
