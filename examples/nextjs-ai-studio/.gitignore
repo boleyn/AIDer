@@ -47,6 +47,10 @@ copilot-messages.log
 .DS_Store
 .project/attachments/files/**
 
+# Environment variables
+.env
+.env.local
+
 # Project data files (keep directory structure)
 data/projects/
 !data/projects/.gitkeep

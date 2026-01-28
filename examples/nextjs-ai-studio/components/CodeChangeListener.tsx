@@ -12,6 +12,7 @@ type CodeChangeListenerProps = {
   template: string;
   dependencies?: Record<string, string>;
   onSaveStatusChange?: (status: SaveStatus) => void;
+  onFilesChange?: (files: Record<string, { code: string }>) => void;
   autoSaveDelay?: number; // 防抖延迟（毫秒）
 };
 
@@ -42,6 +43,7 @@ const CodeChangeListener = forwardRef<CodeChangeListenerHandle, CodeChangeListen
   template,
   dependencies = {},
   onSaveStatusChange,
+  onFilesChange,
   autoSaveDelay = 2000, // 默认2秒延迟
 }, ref) => {
   const { sandpack } = useSandpack();
@@ -102,10 +104,11 @@ const CodeChangeListener = forwardRef<CodeChangeListenerHandle, CodeChangeListen
 
     // 更新之前的文件状态
     previousFilesRef.current = currentFilesString;
+    onFilesChange?.(sandpack.files);
 
     // 触发防抖保存
     debouncedSave();
-  }, [sandpack.files, debouncedSave]);
+  }, [sandpack.files, debouncedSave, onFilesChange]);
 
   // 组件不渲染任何内容，只负责监听和保存
   return null;

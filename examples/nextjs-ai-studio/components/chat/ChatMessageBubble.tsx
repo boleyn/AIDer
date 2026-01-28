@@ -35,7 +35,9 @@ const ChatMessageBubble = ({ role, children }: ChatMessageBubbleProps) => {
       color="gray.700"
       lineHeight="1.5"
     >
-      <Text as="div">{children}</Text>
+      <Text as="div" whiteSpace="pre-wrap">
+        {children}
+      </Text>
     </Box>
   );
 };

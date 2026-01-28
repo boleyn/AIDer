@@ -1,6 +1,10 @@
 import { Flex, IconButton, Text } from "@chakra-ui/react";
 
-const ChatHeader = () => {
+type ChatHeaderProps = {
+  onReset?: () => void;
+};
+
+const ChatHeader = ({ onReset }: ChatHeaderProps) => {
   return (
     <Flex
       align="center"
@@ -57,6 +61,7 @@ const ChatHeader = () => {
           aria-label="New chat"
           size="xs"
           variant="ghost"
+          onClick={onReset}
           icon={
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path

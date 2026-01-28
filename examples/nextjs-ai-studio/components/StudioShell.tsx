@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Flex } from "@chakra-ui/react";
-import type { SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
+import { SandpackProvider, type SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
+import { githubLight } from "@codesandbox/sandpack-themes";
 
 import TopBar from "./TopBar";
 import ChatPanel from "./ChatPanel";
 import WorkspaceShell from "./WorkspaceShell";
 import type { SaveStatus } from "./CodeChangeListener";
+import CodeChangeListener from "./CodeChangeListener";
 
 type SandpackFile = { code: string };
 export type SandpackFiles = Record<string, SandpackFile>;
@@ -86,6 +88,7 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
   const [error, setError] = useState("");
   const [template, setTemplate] = useState<SandpackPredefinedTemplate>(DEFAULT_TEMPLATE);
   const [files, setFiles] = useState<SandpackFiles | null>(null);
+  const latestFilesRef = useRef<SandpackFiles | null>(null);
   const [dependencies, setDependencies] = useState<Record<string, string>>({});
   const [activeView, setActiveView] = useState<ActiveView>("code");
   const [projectName, setProjectName] = useState<string>("");
@@ -126,6 +129,7 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
 
       setTemplate((nextTemplate as SandpackPredefinedTemplate) || DEFAULT_TEMPLATE);
       setFiles(nextFiles);
+      latestFilesRef.current = nextFiles;
       setDependencies(nextDependencies as Record<string, string>);
       setProjectName(nextName);
       setStatus("ready");
@@ -174,7 +178,8 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
 
   const handleManualSave = useCallback(async () => {
     // 手动保存：只保存文件内容
-    if (!token || !files) {
+    const currentFiles = latestFilesRef.current || files;
+    if (!token || !currentFiles) {
       return;
     }
 
@@ -187,7 +192,7 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          files,
+          files: currentFiles,
           name: projectName.trim() || undefined,
         }),
       });
@@ -204,11 +209,12 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
   }, [token, files, projectName]);
 
   const handleDownload = useCallback(() => {
-    if (!files) return;
+    const currentFiles = latestFilesRef.current || files;
+    if (!currentFiles) return;
     
     const projectData = {
       template,
-      files: Object.entries(files).map(([path, file]) => ({
+      files: Object.entries(currentFiles).map(([path, file]) => ({
         path,
         code: file.code,
       })),
@@ -222,6 +228,17 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
     a.click();
     URL.revokeObjectURL(url);
   }, [files, template, dependencies, projectName]);
+
+  const handleFilesChange = useCallback((nextFiles: SandpackFiles) => {
+    latestFilesRef.current = nextFiles;
+  }, []);
+
+  const handleAgentFilesUpdated = useCallback((updated: Record<string, { code: string }>) => {
+    latestFilesRef.current = {
+      ...(latestFilesRef.current || {}),
+      ...updated,
+    };
+  }, []);
 
   const handleProjectNameChange = useCallback(async (newName: string) => {
     if (!token || !newName.trim() || newName === projectName) {
@@ -272,21 +289,33 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
         />
       </Box>
 
-      <Flex as="main" align="stretch" gap={4} flex="1" minH="0">
-        <ChatPanel />
-        <WorkspaceShell
+      <SandpackProvider
+        template={template}
+        files={sandpackFiles}
+        customSetup={customSetup}
+        theme={githubLight}
+        options={{
+          autorun: true,
+        }}
+      >
+        <CodeChangeListener
           token={token}
           template={template}
-          files={sandpackFiles}
-          customSetup={customSetup}
-          status={status}
-          error={error}
-          activeView={activeView}
-          onChangeView={setActiveView}
-          workspaceHeight={workspaceHeight}
+          dependencies={customSetup?.dependencies || {}}
           onSaveStatusChange={setSaveStatus}
+          onFilesChange={handleFilesChange}
         />
-      </Flex>
+        <Flex as="main" align="stretch" gap={4} flex="1" minH="0">
+          <ChatPanel token={token} onFilesUpdated={handleAgentFilesUpdated} />
+          <WorkspaceShell
+            status={status}
+            error={error}
+            activeView={activeView}
+            onChangeView={setActiveView}
+            workspaceHeight={workspaceHeight}
+          />
+        </Flex>
+      </SandpackProvider>
     </Flex>
   );
 };

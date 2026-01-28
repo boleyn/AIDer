@@ -17,6 +17,23 @@ yarn dev
 - `http://localhost:3000/run/hello`
 - `http://localhost:3000/run/three`
 
+## AI 代码智能体
+
+- API：`POST /api/agent?token=<token>`
+- 流式输出：`POST /api/agent?token=<token>&stream=1`（SSE）
+- 需要配置 `.env`（支持 OpenAI / Google）
+- 选择模型提供方：`AI_PROVIDER=openai` 或 `AI_PROVIDER=google`
+- OpenAI：`OPENAI_API_KEY`（可选 `OPENAI_MODEL` / `AI_MODEL`，代理用 `OPENAI_BASE_URL`）
+- Google：`GOOGLE_API_KEY`（可选 `GOOGLE_MODEL`，代理用 `GOOGLE_BASE_URL`）
+- 支持 `/global` 指令：查看、搜索、替换文件内容等
+- 可通过 `MCP_SERVER_URLS`（JSON 或逗号分隔）接入 MCP 工具
+
+示例：
+```
+/global list
+/global {"action":"read","path":"/App.js"}
+```
+
 ## API 返回格式
 
 `/api/code?token=<token>` 返回示例：

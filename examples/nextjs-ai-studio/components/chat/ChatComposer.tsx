@@ -1,6 +1,21 @@
 import { Button, Flex, IconButton, Input } from "@chakra-ui/react";
+import { useCallback, useState } from "react";
 
-const ChatComposer = () => {
+type ChatComposerProps = {
+  onSend: (text: string) => void;
+  isSending?: boolean;
+};
+
+const ChatComposer = ({ onSend, isSending = false }: ChatComposerProps) => {
+  const [value, setValue] = useState("");
+
+  const handleSend = useCallback(() => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onSend(trimmed);
+    setValue("");
+  }, [value, onSend]);
+
   return (
     <Flex direction="column" gap={2} px={4} pt={3} pb={4} borderTop="1px solid" borderColor="gray.200">
       <Input
@@ -8,6 +23,14 @@ const ChatComposer = () => {
         size="sm"
         borderRadius="full"
         bg="white"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            handleSend();
+          }
+        }}
       />
       <Flex align="center" justify="space-between">
         <Flex gap={2}>
@@ -48,7 +71,13 @@ const ChatComposer = () => {
             }
           />
         </Flex>
-        <Button size="sm" colorScheme="blue" borderRadius="full">
+        <Button
+          size="sm"
+          colorScheme="blue"
+          borderRadius="full"
+          onClick={handleSend}
+          isLoading={isSending}
+        >
           Send
         </Button>
       </Flex>

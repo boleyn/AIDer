@@ -16,11 +16,18 @@
     "@codesandbox/sandpack-themes": "*",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
+    "@langchain/core": "^0.3.45",
+    "@langchain/google-genai": "^0.2.17",
+    "@langchain/mcp-adapters": "^1.1.2",
+    "@langchain/openai": "^1.2.3",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "eslint-config-next": "^14.0.0",
     "framer-motion": "^11.0.17",
+    "langchain": "1.2.14",
     "next": "^14.0.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@svgr/webpack": "^8.1.0",
