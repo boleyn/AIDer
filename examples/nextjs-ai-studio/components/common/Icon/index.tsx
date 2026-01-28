@@ -6,3 +6,4 @@ export { default as DownloadIcon } from "./icons/download.svg";
 export { default as ShareIcon } from "./icons/share.svg";
 export { default as SplitViewIcon } from "./icons/split-view.svg";
 export { default as SettingsIcon } from "./icons/settings.svg";
+export { default as SaveIcon } from "./icons/save.svg";

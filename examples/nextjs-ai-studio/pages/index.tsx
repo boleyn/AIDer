@@ -1,19 +1,13 @@
-import { useEffect } from "react";
-import { useRouter } from "next/router";
+import { Flex } from "@chakra-ui/react";
 
-import StudioShell from "../components/StudioShell";
+import ProjectList from "../components/ProjectList";
 
 const HomePage = () => {
-  const router = useRouter();
-  const { code } = router.query;
-
-  useEffect(() => {
-    if (typeof code === "string" && code.length > 0) {
-      router.replace(`/run/${encodeURIComponent(code)}`);
-    }
-  }, [code, router]);
-
-  return <StudioShell />;
+  return (
+    <Flex direction="column" minH="100vh" bg="gray.50">
+      <ProjectList />
+    </Flex>
+  );
 };
 
 export default HomePage;

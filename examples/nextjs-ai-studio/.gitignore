@@ -46,3 +46,7 @@ copilot-messages.log
 # System files
 .DS_Store
 .project/attachments/files/**
+
+# Project data files (keep directory structure)
+data/projects/
+!data/projects/.gitkeep

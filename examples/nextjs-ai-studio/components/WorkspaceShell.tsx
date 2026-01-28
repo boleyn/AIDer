@@ -13,10 +13,12 @@ import { Box, Flex } from "@chakra-ui/react";
 import type { SandpackFiles } from "./StudioShell";
 import FileExplorerPanel from "./workspace/FileExplorerPanel";
 import WorkspaceHeader from "./workspace/WorkspaceHeader";
+import CodeChangeListener, { type SaveStatus } from "./CodeChangeListener";
 
 type ActiveView = "preview" | "code";
 
 type WorkspaceShellProps = {
+  token: string;
   template: SandpackPredefinedTemplate;
   files: SandpackFiles;
   customSetup?: { dependencies: Record<string, string> };
@@ -25,9 +27,11 @@ type WorkspaceShellProps = {
   activeView: ActiveView;
   onChangeView: (view: ActiveView) => void;
   workspaceHeight: string;
+  onSaveStatusChange?: (status: SaveStatus) => void;
 };
 
 const WorkspaceShell = ({
+  token,
   template,
   files,
   customSetup,
@@ -36,7 +40,9 @@ const WorkspaceShell = ({
   activeView,
   onChangeView,
   workspaceHeight,
+  onSaveStatusChange,
 }: WorkspaceShellProps) => {
+
   return (
     <Flex
       as="section"
@@ -59,6 +65,12 @@ const WorkspaceShell = ({
           autorun: true,
         }}
       >
+        <CodeChangeListener
+          token={token}
+          template={template}
+          dependencies={customSetup?.dependencies || {}}
+          onSaveStatusChange={onSaveStatusChange}
+        />
         <Flex direction="column" flex="1" minH="0" h="100%">
           <WorkspaceHeader
             activeView={activeView}

@@ -5,6 +5,7 @@ import type { SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
 import TopBar from "./TopBar";
 import ChatPanel from "./ChatPanel";
 import WorkspaceShell from "./WorkspaceShell";
+import type { SaveStatus } from "./CodeChangeListener";
 
 type SandpackFile = { code: string };
 export type SandpackFiles = Record<string, SandpackFile>;
@@ -86,7 +87,9 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
   const [template, setTemplate] = useState<SandpackPredefinedTemplate>(DEFAULT_TEMPLATE);
   const [files, setFiles] = useState<SandpackFiles | null>(null);
   const [dependencies, setDependencies] = useState<Record<string, string>>({});
-  const [activeView, setActiveView] = useState<ActiveView>("preview");
+  const [activeView, setActiveView] = useState<ActiveView>("code");
+  const [projectName, setProjectName] = useState<string>("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const topBarRef = useRef<HTMLDivElement | null>(null);
   const [topBarHeight, setTopBarHeight] = useState(0);
 
@@ -119,10 +122,12 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
         (payload as Record<string, { dependencies?: Record<string, string> }>)
           .sandpack?.dependencies ||
         {};
+      const nextName = (payload.name as string) || "未命名项目";
 
       setTemplate((nextTemplate as SandpackPredefinedTemplate) || DEFAULT_TEMPLATE);
       setFiles(nextFiles);
       setDependencies(nextDependencies as Record<string, string>);
+      setProjectName(nextName);
       setStatus("ready");
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败，请检查后端接口。 ");
@@ -131,10 +136,15 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
   }, []);
 
   useEffect(() => {
-    if (initialToken) {
-      loadProject(initialToken);
+    // 当initialToken变化时，更新token并加载项目（首次进入也需要加载）
+    if (!initialToken) {
+      return;
     }
-  }, [initialToken, loadProject]);
+    if (initialToken !== token) {
+      setToken(initialToken);
+    }
+    loadProject(initialToken);
+  }, [initialToken, token, loadProject]);
 
   useEffect(() => {
     if (!topBarRef.current) {
@@ -162,14 +172,88 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
     return { dependencies };
   }, [dependencies]);
 
-  const handleLoadClick = () => {
-    if (!token) {
-      loadProject("");
+  const handleManualSave = useCallback(async () => {
+    // 手动保存：只保存文件内容
+    if (!token || !files) {
       return;
     }
-    window.history.replaceState(null, "", `/run/${encodeURIComponent(token)}`);
-    loadProject(token);
-  };
+
+    setSaveStatus("saving");
+
+    try {
+      const response = await fetch(`/api/code?token=${encodeURIComponent(token)}&action=files`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          files,
+          name: projectName.trim() || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`保存失败: ${response.status}`);
+      }
+
+      setSaveStatus("saved");
+    } catch (error) {
+      console.error("Failed to save project:", error);
+      setSaveStatus("error");
+    }
+  }, [token, files, projectName]);
+
+  const handleDownload = useCallback(() => {
+    if (!files) return;
+    
+    const projectData = {
+      template,
+      files: Object.entries(files).map(([path, file]) => ({
+        path,
+        code: file.code,
+      })),
+      dependencies,
+    };
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${projectName || "project"}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [files, template, dependencies, projectName]);
+
+  const handleProjectNameChange = useCallback(async (newName: string) => {
+    if (!token || !newName.trim() || newName === projectName) {
+      return;
+    }
+
+    try {
+      // 只传需要更新的字段
+      const response = await fetch(`/api/code?token=${encodeURIComponent(token)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`更新失败: ${response.status}`);
+      }
+
+      // 更新项目名称状态
+      setProjectName(newName.trim());
+      
+      // 返回成功，让TopBar知道保存成功
+      return true;
+    } catch (error) {
+      console.error("Failed to update project name:", error);
+      throw error; // 抛出错误，让TopBar处理
+    }
+  }, [token, projectName]);
 
   const chromeOffset = 44;
   const workspaceHeight = topBarHeight
@@ -180,16 +264,18 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
     <Flex direction="column" h="100vh" bg="transparent" p={{ base: 3, md: 4 }} gap={3}>
       <Box ref={topBarRef}>
         <TopBar
-          token={token}
-          loading={status === "loading"}
-          onTokenChange={setToken}
-          onLoad={handleLoadClick}
+          projectName={projectName}
+          saveStatus={saveStatus}
+          onSave={handleManualSave}
+          onDownload={handleDownload}
+          onProjectNameChange={handleProjectNameChange}
         />
       </Box>
 
       <Flex as="main" align="stretch" gap={4} flex="1" minH="0">
         <ChatPanel />
         <WorkspaceShell
+          token={token}
           template={template}
           files={sandpackFiles}
           customSetup={customSetup}
@@ -198,6 +284,7 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
           activeView={activeView}
           onChangeView={setActiveView}
           workspaceHeight={workspaceHeight}
+          onSaveStatusChange={setSaveStatus}
         />
       </Flex>
     </Flex>
