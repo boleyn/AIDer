@@ -36,19 +36,19 @@ export async function loadMcpTools(): Promise<ToolInterface[]> {
 
   const key = JSON.stringify(servers);
   if (!cachedClient || cachedServersKey !== key) {
-    cachedClient = new MultiServerMCPClient(
-      Object.fromEntries(
+    cachedClient = new MultiServerMCPClient({
+      mcpServers: Object.fromEntries(
         servers.map((server) => [
           server.name,
           {
-            transport: "sse",
+            transport: "sse" as const,
             url: server.url,
           },
         ])
-      )
-    );
+      ),
+    });
     cachedServersKey = key;
   }
 
-  return cachedClient.getTools();
+  return cachedClient.getTools() as Promise<ToolInterface[]>;
 }
