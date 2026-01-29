@@ -6,6 +6,7 @@ import {
   SandpackStack,
 } from "@codesandbox/sandpack-react";
 import { Box, Flex } from "@chakra-ui/react";
+import { useEffect, useRef, useState } from "react";
 
 import FileExplorerPanel from "./workspace/FileExplorerPanel";
 import WorkspaceHeader from "./workspace/WorkspaceHeader";
@@ -27,6 +28,28 @@ const WorkspaceShell = ({
   onChangeView,
   workspaceHeight,
 }: WorkspaceShellProps) => {
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) {
+      return;
+    }
+    const updateHeight = () => {
+      setHeaderHeight(header.getBoundingClientRect().height);
+    };
+    updateHeight();
+    const observer = new ResizeObserver(() => updateHeight());
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
+
+  const baseHeight = Number.parseFloat(workspaceHeight);
+  const contentHeight =
+    Number.isFinite(baseHeight) && baseHeight > 0
+      ? `${Math.max(0, baseHeight - headerHeight)}px`
+      : "100%";
 
   return (
     <Flex
@@ -42,25 +65,27 @@ const WorkspaceShell = ({
       overflow="hidden"
     >
       <Flex direction="column" flex="1" minH="0" h="100%">
-        <WorkspaceHeader
-          activeView={activeView}
-          onChangeView={onChangeView}
-          status={status}
-          error={error}
-        />
+        <Box ref={headerRef}>
+          <WorkspaceHeader
+            activeView={activeView}
+            onChangeView={onChangeView}
+            status={status}
+            error={error}
+          />
+        </Box>
         <Box
           position="relative"
           flex="1"
           minH="0"
           display="flex"
-          height={workspaceHeight}
-          minHeight={workspaceHeight}
+          height={contentHeight}
+          minHeight={contentHeight}
         >
           <SandpackLayout
             style={{
               width: "100%",
-              height: workspaceHeight,
-              minHeight: workspaceHeight,
+              height: "100%",
+              minHeight: 0,
               display: activeView === "code" ? "flex" : "none",
             }}
           >
@@ -69,11 +94,21 @@ const WorkspaceShell = ({
               <SandpackStack
                 style={{
                   position: "absolute",
+                  inset: 0,
                   display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  width: "100%",
+                  height: "100%",
                 }}
               >
-                <SandpackCodeEditor showTabs showLineNumbers wrapContent style={{ height: workspaceHeight }} />
-                <SandpackConsole />
+                <SandpackCodeEditor
+                  showTabs
+                  showLineNumbers
+                  wrapContent
+                  style={{ flex: 1, minHeight: 0 }}
+                />
+                <SandpackConsole style={{ maxHeight: "35%", overflow: "auto" }} />
               </SandpackStack>
             </Box>
           </SandpackLayout>
@@ -88,10 +123,14 @@ const WorkspaceShell = ({
             <SandpackStack
               style={{
                 position: "absolute",
+                inset: 0,
                 display: "flex",
+                minHeight: 0,
+                width: "100%",
+                height: "100%",
               }}
             >
-              <SandpackPreview style={{ height: workspaceHeight }} />
+              <SandpackPreview style={{ width: "100%", height: "100%" }} />
             </SandpackStack>
           </Box>
         </Box>

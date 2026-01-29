@@ -2,7 +2,6 @@ import { Box, Flex, Text } from "@chakra-ui/react";
 import { type MutableRefObject, type ReactNode, useCallback, useEffect, useRef } from "react";
 import {
   AssistantRuntimeProvider,
-  ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   useAui,
@@ -16,11 +15,15 @@ import {
 } from "@assistant-ui/react-langgraph";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 
-import ChatHeader from "./chat/ChatHeader";
+import ChatComposerBar from "./chat/ChatComposerBar";
+import ChatMessagesSection from "./chat/ChatMessagesSection";
+import ChatTitleSection from "./chat/ChatTitleSection";
+import { ToolCallCard } from "./chat/ToolCallCard";
 
 type ChatPanelProps = {
   token: string;
   onFilesUpdated?: (files: Record<string, { code: string }>) => void;
+  height?: string;
 };
 
 type AgentMessage = {
@@ -59,8 +62,11 @@ const MarkdownText: TextMessagePartComponent = () => (
   <MarkdownTextPrimitive className="assistant-markdown" />
 );
 
-const messageContentComponents = {
+const messagePartsComponents = {
   Text: MarkdownText,
+  tools: {
+    Override: ToolCallCard,
+  },
 } as const;
 
 const toAgentMessage = (message: LangChainMessage): AgentMessage => {
@@ -109,7 +115,7 @@ const UserMessage = () => (
     <Flex justify="flex-end">
       <Box className="assistant-bubble">
         <MessageBubble role="user">
-          <MessagePrimitive.Content components={messageContentComponents} />
+          <MessagePrimitive.Parts components={messagePartsComponents} />
         </MessageBubble>
       </Box>
     </Flex>
@@ -121,7 +127,7 @@ const AssistantMessage = () => (
     <Flex justify="flex-start">
       <Box className="assistant-bubble">
         <MessageBubble role="assistant">
-          <MessagePrimitive.Content components={messageContentComponents} />
+          <MessagePrimitive.Parts components={messagePartsComponents} />
           <MessagePrimitive.Error>
             <Text mt={2} fontSize="xs" color="red.500">
               生成失败，请重试。
@@ -138,7 +144,7 @@ const SystemMessage = () => (
     <Flex justify="center">
       <Box className="assistant-bubble">
         <MessageBubble role="system">
-          <MessagePrimitive.Content components={messageContentComponents} />
+          <MessagePrimitive.Parts components={messagePartsComponents} />
         </MessageBubble>
       </Box>
     </Flex>
@@ -151,20 +157,11 @@ const threadMessageComponents = {
   SystemMessage,
 } as const;
 
-const AssistantThread = () => (
+const AssistantThread = ({ onReset }: { onReset: () => void }) => (
   <ThreadPrimitive.Root className="assistant-thread">
-    <ThreadPrimitive.Viewport className="assistant-viewport" autoScroll>
-      <ThreadPrimitive.Messages components={threadMessageComponents} />
-      <ThreadPrimitive.ViewportFooter className="assistant-footer">
-        <ComposerPrimitive.Root className="assistant-composer">
-          <ComposerPrimitive.Input
-            className="assistant-input"
-            placeholder="描述你想改的地方，或直接提出需求..."
-          />
-          <ComposerPrimitive.Send className="assistant-send">发送</ComposerPrimitive.Send>
-        </ComposerPrimitive.Root>
-      </ThreadPrimitive.ViewportFooter>
-    </ThreadPrimitive.Viewport>
+    <ChatTitleSection onReset={onReset} />
+    <ChatMessagesSection components={threadMessageComponents} />
+    <ChatComposerBar />
   </ThreadPrimitive.Root>
 );
 
@@ -190,15 +187,10 @@ const ChatPanelBody = ({ token, historyRef }: ChatPanelBodyProps) => {
     resetThread();
   }, [resetThread, token]);
 
-  return (
-    <>
-      <ChatHeader onReset={resetThread} />
-      <AssistantThread />
-    </>
-  );
+  return <AssistantThread onReset={resetThread} />;
 };
 
-const ChatPanel = ({ token, onFilesUpdated }: ChatPanelProps) => {
+const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) => {
   const historyRef = useRef<LangChainMessage[]>([]);
 
   const stream = useCallback<LangGraphStreamCallback<LangChainMessage>>(
@@ -366,11 +358,14 @@ const ChatPanel = ({ token, onFilesUpdated }: ChatPanelProps) => {
     <Flex
       as="aside"
       direction="column"
+      h={height}
       minW="280px"
       w="32%"
       maxW="420px"
       flex="0 0 auto"
       minH="0"
+      overflow="hidden"
+      alignSelf="stretch"
       border="1px solid"
       borderColor="gray.200"
       borderRadius="xl"

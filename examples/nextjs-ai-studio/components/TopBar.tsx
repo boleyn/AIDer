@@ -5,6 +5,7 @@ import { useRouter } from "next/router";
 import TopBarActions from "./topbar/TopBarActions";
 import MyTooltip from "./ui/MyTooltip";
 import type { SaveStatus } from "./CodeChangeListener";
+import { BackIcon, CheckIcon, CloseIcon, EditIcon, SaveIcon } from "./common/Icon";
 
 type TopBarProps = {
   projectName?: string;
@@ -17,85 +18,6 @@ type TopBarProps = {
   onOpenInNew?: () => void;
   onProjectNameChange?: (name: string) => void;
 };
-
-// 返回图标组件
-const BackIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-    <path
-      d="M19 12H5M12 19l-7-7 7-7"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-// 保存图标组件
-const SaveIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-    <path
-      d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M17 21v-8H7v8M7 3v5h8"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-// 确认图标
-const CheckIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-    <path
-      d="M20 6L9 17l-5-5"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-// 取消图标
-const CloseIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-    <path
-      d="M18 6L6 18M6 6l12 12"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-// 编辑图标
-const EditIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-    <path
-      d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 const TopBar = ({
   projectName = "未命名项目",

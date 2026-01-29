@@ -93,8 +93,6 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
   const [activeView, setActiveView] = useState<ActiveView>("code");
   const [projectName, setProjectName] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const topBarRef = useRef<HTMLDivElement | null>(null);
-  const [topBarHeight, setTopBarHeight] = useState(0);
 
   const loadProject = useCallback(async (requestedToken: string) => {
     if (!requestedToken) {
@@ -149,20 +147,6 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
     }
     loadProject(initialToken);
   }, [initialToken, token, loadProject]);
-
-  useEffect(() => {
-    if (!topBarRef.current) {
-      return;
-    }
-    const element = topBarRef.current;
-    const updateHeight = () => {
-      setTopBarHeight(element.getBoundingClientRect().height);
-    };
-    updateHeight();
-    const observer = new ResizeObserver(() => updateHeight());
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   const sandpackFiles = useMemo<SandpackFiles>(
     () => files || fallbackFiles,
@@ -274,14 +258,52 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
     }
   }, [token, projectName]);
 
-  const chromeOffset = 44;
-  const workspaceHeight = topBarHeight
-    ? `calc(100vh - ${topBarHeight}px - ${chromeOffset}px)`
-    : "100vh";
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLDivElement | null>(null);
+  const [workspaceHeight, setWorkspaceHeight] = useState("100%");
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const main = mainRef.current;
+    if (!container || !main) {
+      return;
+    }
+
+    const updateHeight = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const mainTop = main.getBoundingClientRect().top;
+      const containerStyles = getComputedStyle(container);
+      const paddingBottom = parseFloat(containerStyles.paddingBottom || "0") || 0;
+      const borderBottom = parseFloat(containerStyles.borderBottomWidth || "0") || 0;
+      const nextHeight = Math.max(0, viewportHeight - mainTop - paddingBottom - borderBottom);
+      setWorkspaceHeight(`${nextHeight}px`);
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(() => updateHeight());
+    observer.observe(container);
+    observer.observe(main);
+    window.addEventListener("resize", updateHeight);
+    window.visualViewport?.addEventListener("resize", updateHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+      window.visualViewport?.removeEventListener("resize", updateHeight);
+    };
+  }, []);
 
   return (
-    <Flex direction="column" h="100vh" bg="transparent" p={{ base: 3, md: 4 }} gap={3}>
-      <Box ref={topBarRef}>
+    <Flex
+      ref={containerRef}
+      direction="column"
+      h="100dvh"
+      bg="transparent"
+      p={{ base: 3, md: 4 }}
+      gap={3}
+      overflow="hidden"
+      boxSizing="border-box"
+    >
+      <Box>
         <TopBar
           projectName={projectName}
           saveStatus={saveStatus}
@@ -307,8 +329,12 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
           onSaveStatusChange={setSaveStatus}
           onFilesChange={handleFilesChange}
         />
-        <Flex as="main" align="stretch" gap={4} flex="1" minH="0">
-          <ChatPanel token={token} onFilesUpdated={handleAgentFilesUpdated} />
+        <Flex ref={mainRef} as="main" align="stretch" gap={4} flex="1" minH="0">
+          <ChatPanel
+            token={token}
+            onFilesUpdated={handleAgentFilesUpdated}
+            height={workspaceHeight}
+          />
           <WorkspaceShell
             status={status}
             error={error}

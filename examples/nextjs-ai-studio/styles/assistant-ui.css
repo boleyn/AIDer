@@ -1,7 +1,6 @@
 .assistant-thread {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
   height: 100%;
   min-height: 0;
 }
@@ -9,6 +8,7 @@
 .assistant-viewport {
   flex: 1;
   overflow-y: auto;
+  scroll-behavior: smooth;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -25,11 +25,9 @@
 }
 
 .assistant-footer {
-  position: sticky;
-  bottom: 0;
-  margin-top: auto;
   background: #ffffff;
-  padding-top: 8px;
+  padding: 8px 16px 12px;
+  border-top: 1px solid #e5e7eb;
 }
 
 .assistant-composer {
@@ -131,4 +129,47 @@
   padding-left: 0.75rem;
   border-left: 3px solid #e5e7eb;
   color: #6b7280;
+}
+
+.assistant-tool {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.assistant-tool-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.assistant-tool-summary::-webkit-details-marker {
+  display: none;
+}
+
+.assistant-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.assistant-tool-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.assistant-tool-title {
+  margin-bottom: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
 }
