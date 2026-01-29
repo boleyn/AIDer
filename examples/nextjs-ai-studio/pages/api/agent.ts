@@ -1,6 +1,21 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import type { BaseMessage } from "@langchain/core/messages";
-import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
+import type {
+  BaseMessage,
+  MessageContent,
+  MessageContentComplex,
+  ToolCallChunk,
+  ToolCall,
+} from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+  isAIMessage,
+  isToolMessage,
+} from "@langchain/core/messages";
+import { createAgent } from "langchain";
+import { getAgentRuntimeConfig } from "../../utils/agentConfig";
 
 import { SYSTEM_PROMPT } from "../../utils/agentPrompt";
 import {
@@ -13,11 +28,11 @@ import {
 import { loadMcpTools } from "../../utils/mcpClient";
 import { getProject } from "../../utils/projectStorage";
 
-const MAX_TOOL_ROUNDS = 6;
-
 type IncomingMessage = {
-  role: "user" | "assistant" | "system";
-  content: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: unknown;
+  name?: string;
+  tool_call_id?: string;
 };
 
 type AgentResponse = {
@@ -27,14 +42,39 @@ type AgentResponse = {
   error?: string;
 };
 
+const isMessageContentComplexArray = (
+  value: unknown
+): value is MessageContentComplex[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null);
+
+const normalizeMessageContent = (content: unknown): MessageContent => {
+  if (typeof content === "string") return content;
+  if (isMessageContentComplexArray(content)) return content;
+  if (content && typeof content === "object" && "text" in content) {
+    const record = content as Record<string, unknown>;
+    if (typeof record.text === "string") return record.text;
+    if (record.text != null) return String(record.text);
+  }
+  return JSON.stringify(content ?? "");
+};
+
 function toBaseMessage(message: IncomingMessage): BaseMessage {
+  const content = normalizeMessageContent(message.content ?? "");
   if (message.role === "assistant") {
-    return new AIMessage(message.content);
+    return new AIMessage({ content });
   }
   if (message.role === "system") {
-    return new SystemMessage(message.content);
+    const systemContent =
+      typeof content === "string" ? content : JSON.stringify(content);
+    return new SystemMessage(systemContent);
   }
-  return new HumanMessage(message.content);
+  if (message.role === "tool") {
+    return new ToolMessage({
+      tool_call_id: message.tool_call_id ?? message.name ?? "tool",
+      content,
+    });
+  }
+  return new HumanMessage({ content });
 }
 
 function extractText(content: unknown): string {
@@ -50,10 +90,95 @@ function extractText(content: unknown): string {
   return "";
 }
 
-function getToolCalls(message: AIMessage): Array<{ id?: string; name: string; args: unknown }> {
-  const anyMessage = message as AIMessage & { tool_calls?: any[]; toolCalls?: any[] };
-  return anyMessage.tool_calls || anyMessage.toolCalls || [];
-}
+type LangChainMessageShape = {
+  id?: string;
+  type: "system" | "human" | "ai" | "tool";
+  content: MessageContent;
+  additional_kwargs?: Record<string, unknown>;
+  tool_calls?: ToolCall[];
+  tool_call_chunks?: ToolCallChunk[];
+  tool_call_id?: string;
+  name?: string;
+  status?: "success" | "error";
+  artifact?: unknown;
+};
+
+type LangChainMessageChunkShape = {
+  id?: string;
+  type: "AIMessageChunk";
+  content?: MessageContent;
+  tool_call_chunks?: ToolCallChunk[];
+};
+
+const getMessageType = (message: BaseMessage): string => {
+  if (typeof (message as BaseMessage).getType === "function") {
+    return (message as BaseMessage).getType();
+  }
+  return (message as BaseMessage & { type?: string }).type ?? "unknown";
+};
+
+const serializeMessage = (message: BaseMessage): LangChainMessageShape => {
+  const type = getMessageType(message);
+  const base = {
+    id: message.id,
+    content: message.content,
+    additional_kwargs: message.additional_kwargs,
+  };
+
+  if (type === "ai") {
+    const aiMessage = message as BaseMessage & {
+      tool_calls?: ToolCall[];
+      tool_call_chunks?: ToolCallChunk[];
+      status?: "success" | "error";
+    };
+    return {
+      ...base,
+      type: "ai",
+      tool_calls: aiMessage.tool_calls,
+      tool_call_chunks: aiMessage.tool_call_chunks,
+      status: aiMessage.status,
+    };
+  }
+
+  if (type === "tool") {
+    const toolMessage = message as BaseMessage & {
+      tool_call_id?: string;
+      name?: string;
+      status?: "success" | "error";
+      artifact?: unknown;
+    };
+    return {
+      ...base,
+      type: "tool",
+      tool_call_id: toolMessage.tool_call_id,
+      name: toolMessage.name,
+      status: toolMessage.status,
+      artifact: toolMessage.artifact,
+    };
+  }
+
+  if (type === "system") {
+    return { ...base, type: "system" };
+  }
+
+  return { ...base, type: "human" };
+};
+
+const serializeMessageChunk = (chunk: unknown): LangChainMessageChunkShape | null => {
+  if (!chunk || typeof chunk !== "object") return null;
+  const chunkRecord = chunk as {
+    id?: string;
+    content?: MessageContent;
+    tool_call_chunks?: ToolCallChunk[];
+  };
+  return {
+    id: chunkRecord.id,
+    type: "AIMessageChunk",
+    content: chunkRecord.content,
+    tool_call_chunks: chunkRecord.tool_call_chunks,
+  };
+};
+
 
 function formatGlobalResult(result: GlobalToolResult): string {
   if (!result.ok) {
@@ -129,19 +254,22 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
   };
-  if (lastMessage?.role === "user") {
+  if (lastMessage?.role === "user" && typeof lastMessage.content === "string") {
     const parsed = parseGlobalCommand(lastMessage.content);
     if (parsed) {
       if (!parsed.ok) {
-        if (shouldStream) {
-          startStream();
-          sendEvent("message", {
-            message: parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""),
-          });
-          sendEvent("done", {});
-          res.end();
-          return;
-        }
+      if (shouldStream) {
+        startStream();
+        sendEvent("messages/complete", [
+          {
+            type: "ai",
+            content: parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""),
+          },
+        ]);
+        sendEvent("done", {});
+        res.end();
+        return;
+      }
         res.status(200).json({
           message: parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""),
         });
@@ -164,7 +292,15 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
 
       if (shouldStream) {
         startStream();
-        sendEvent("message", { message: formatGlobalResult(result), updatedFiles });
+        sendEvent("messages/complete", [
+          {
+            type: "ai",
+            content: formatGlobalResult(result),
+          },
+        ]);
+        if (updatedFiles) {
+          sendEvent("files", updatedFiles);
+        }
         sendEvent("done", {});
         res.end();
         return;
@@ -174,14 +310,12 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     }
   }
 
-  const inferredProvider =
-    process.env.AI_PROVIDER ||
-    (process.env.GOOGLE_API_KEY ? "google" : "openai");
-  const provider = inferredProvider.toLowerCase();
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const googleKey = process.env.GOOGLE_API_KEY;
-  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
-  const googleBaseUrl = process.env.GOOGLE_BASE_URL;
+  const runtimeConfig = getAgentRuntimeConfig();
+  const provider = runtimeConfig.provider;
+  const openaiKey = runtimeConfig.openaiKey;
+  const googleKey = runtimeConfig.googleKey;
+  const openaiBaseUrl = runtimeConfig.openaiBaseUrl;
+  const googleBaseUrl = runtimeConfig.googleBaseUrl;
 
   if (provider === "openai" && !openaiKey) {
     res.status(400).json({
@@ -203,73 +337,148 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
   const localTools = createProjectTools(token, tracker);
   const mcpTools = await loadMcpTools();
   const allTools = [...localTools, ...mcpTools];
-  const toolMap = new Map(allTools.map((toolItem) => [toolItem.name, toolItem]));
 
-  const googleModelName = process.env.GOOGLE_MODEL || "gemini-1.5-flash";
-  const openaiModelName = process.env.OPENAI_MODEL || process.env.AI_MODEL || "gpt-4o-mini";
-  const isGemini3 = provider === "google" && googleModelName.toLowerCase().startsWith("gemini-3");
+  const model = await getCachedModel({
+    provider,
+    openaiKey,
+    openaiBaseUrl,
+    openaiModelName: runtimeConfig.modelName,
+    googleKey,
+    googleBaseUrl,
+    googleModelName: runtimeConfig.modelName,
+    temperature: runtimeConfig.temperature,
+  });
+  
+  const agent = createAgent({
+    model,
+    tools: allTools,
+    systemPrompt: SYSTEM_PROMPT,
+  });
 
-  const model =
-    provider === "google"
-      ? new (await import("@langchain/google-genai")).ChatGoogleGenerativeAI({
-          apiKey: googleKey,
-          model: googleModelName,
-          temperature: 0.2,
-          baseUrl: googleBaseUrl || undefined,
-        })
-      : new (await import("@langchain/openai")).ChatOpenAI({
-          apiKey: openaiKey,
-          model: openaiModelName,
-          temperature: 0.2,
-          configuration: openaiBaseUrl ? { baseURL: openaiBaseUrl } : undefined,
-        });
-
-  const shouldBindTools = allTools.length > 0 && !isGemini3;
-  const modelWithTools = shouldBindTools ? model.bindTools(allTools) : model;
-  const messages: BaseMessage[] = [new SystemMessage(SYSTEM_PROMPT)];
-  if (isGemini3 && allTools.length > 0) {
-    messages[0] = new SystemMessage(
-      `${SYSTEM_PROMPT}\n\n注意：Gemini 3 系列目前对工具调用要求 thought_signature（JS SDK 尚未支持）。已临时关闭工具调用。请改用 gemini-1.5/2.0 系列或切换 OpenAI 以启用工具。`
-    );
-  }
-  messages.push(...incomingMessages.map(toBaseMessage));
-
-  let response = (await modelWithTools.invoke(messages)) as AIMessage;
-  const toolResults: Array<{ tool: string; result: unknown }> = [];
-  let rounds = 0;
-
-  while (rounds < MAX_TOOL_ROUNDS) {
-    const toolCalls = getToolCalls(response);
-    if (!toolCalls || toolCalls.length === 0) {
-      break;
-    }
-
-    const toolMessages: ToolMessage[] = [];
-    for (const call of toolCalls) {
-      const toolItem = toolMap.get(call.name);
-      if (!toolItem) {
-        toolMessages.push(
-          new ToolMessage({
-            tool_call_id: call.id ?? call.name,
-            content: JSON.stringify({ ok: false, message: `未找到工具 ${call.name}` }),
-          })
-        );
-        continue;
-      }
-      const result = await toolItem.invoke(call.args ?? {});
-      toolResults.push({ tool: call.name, result });
-      toolMessages.push(
-        new ToolMessage({
-          tool_call_id: call.id ?? call.name,
-          content: JSON.stringify(result),
-        })
+  if (shouldStream) {
+    startStream();
+    try {
+      const stream = await agent.stream(
+        { messages: incomingMessages.map(toBaseMessage) },
+        { streamMode: ["messages", "updates"] }
       );
+
+      for await (const chunk of stream) {
+        if (!chunk) continue;
+
+        const handleEntry = (mode: string, payload: unknown) => {
+          if (mode === "messages") {
+            const tuple = Array.isArray(payload)
+              ? (payload as [unknown, unknown])
+              : [payload, undefined];
+            const tupleValue = tuple?.[0];
+            const messageChunk =
+              serializeMessageChunk(tupleValue) ||
+              (typeof tupleValue === "string"
+                ? {
+                    type: "AIMessageChunk",
+                    content: tupleValue,
+                  }
+                : null);
+            if (!messageChunk) return;
+            sendEvent("messages", [messageChunk, tuple?.[1]]);
+            return;
+          }
+
+          if (mode === "updates") {
+            const state = payload as { messages?: BaseMessage[]; [key: string]: unknown };
+            if (Array.isArray(state.messages)) {
+              sendEvent("updates", {
+                ...state,
+                messages: state.messages.map(serializeMessage),
+              });
+            } else {
+              sendEvent("updates", state);
+            }
+            return;
+          }
+
+          sendEvent(mode, payload);
+        };
+
+        const isBinaryChunk =
+          typeof chunk === "object" &&
+          chunk !== null &&
+          ArrayBuffer.isView(chunk);
+        if (isBinaryChunk) {
+          continue;
+        }
+
+        const tupleLike =
+          Array.isArray(chunk) ||
+          (typeof chunk === "object" &&
+            chunk !== null &&
+            "0" in chunk &&
+            "1" in chunk &&
+            Object.keys(chunk as Record<string, unknown>).length === 2);
+
+        if (tupleLike) {
+          const tuple = Array.isArray(chunk)
+            ? chunk
+            : [
+                (chunk as Record<string, unknown>)[0],
+                (chunk as Record<string, unknown>)[1],
+              ];
+          handleEntry(String(tuple[0]), tuple[1]);
+          continue;
+        }
+
+        if (typeof chunk === "object") {
+          const record = chunk as Record<string, unknown>;
+          if ("event" in record && "data" in record) {
+            handleEntry(String(record.event), record.data);
+            continue;
+          }
+          for (const [mode, payload] of Object.entries(record)) {
+            handleEntry(mode, payload);
+          }
+        }
+      }
+    } catch (error) {
+      sendEvent("error", {
+        error: error instanceof Error ? error.message : "请求失败",
+      });
+      sendEvent("done", {});
+      res.end();
+      return;
     }
 
-    messages.push(response, ...toolMessages);
-    response = (await modelWithTools.invoke(messages)) as AIMessage;
-    rounds += 1;
+    const updatedFiles = tracker.changed
+      ? await getProject(token).then((data) => {
+          if (!data) return undefined;
+          const output: Record<string, { code: string }> = {};
+          tracker.paths.forEach((path) => {
+            if (data.files[path]) {
+              output[path] = data.files[path];
+            }
+          });
+          return output;
+        })
+      : undefined;
+
+    if (updatedFiles) {
+      sendEvent("files", updatedFiles);
+    }
+    sendEvent("done", {});
+    res.end();
+    return;
   }
+
+  const result = await agent.invoke({
+    messages: incomingMessages.map(toBaseMessage),
+  });
+  const outputMessages = Array.isArray(result?.messages) ? result.messages : [];
+  const toolMessages = outputMessages.filter(isToolMessage);
+  const toolResults = toolMessages.map((message) => ({
+    tool: message.name ?? message.tool_call_id ?? "tool",
+    result: message.content,
+  }));
+  const aiMessage = [...outputMessages].reverse().find(isAIMessage);
 
   const updatedFiles = tracker.changed
     ? await getProject(token).then((data) => {
@@ -285,7 +494,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     : undefined;
 
   const finalMessage =
-    extractText(response.content) || (toolResults.length > 0 ? "已完成工具操作。" : "");
+    (aiMessage ? extractText(aiMessage.content) : "") ||
+    (toolResults.length > 0 ? "已完成工具操作。" : "");
 
   if (shouldStream) {
     startStream();
@@ -307,3 +517,63 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
 };
 
 export default handler;
+
+type ModelCacheParams = {
+  provider: string;
+  openaiKey?: string;
+  openaiBaseUrl?: string;
+  openaiModelName: string;
+  googleKey?: string;
+  googleBaseUrl?: string;
+  googleModelName: string;
+  temperature: number;
+};
+
+type CachedModel = Awaited<ReturnType<typeof getCachedModel>>;
+
+const modelCache = new Map<string, Promise<CachedModel>>();
+
+const buildModelCacheKey = (params: ModelCacheParams) =>
+  JSON.stringify({
+    provider: params.provider,
+    temperature: params.temperature,
+    openaiModelName: params.openaiModelName,
+    openaiBaseUrl: params.openaiBaseUrl || "",
+    openaiKey: params.openaiKey ? "set" : "missing",
+    googleModelName: params.googleModelName,
+    googleBaseUrl: params.googleBaseUrl || "",
+    googleKey: params.googleKey ? "set" : "missing",
+  });
+
+async function getCachedModel(params: ModelCacheParams) {
+  const cacheKey = buildModelCacheKey(params);
+  const existing = modelCache.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+
+  const modelPromise = (async () => {
+    if (params.provider === "google") {
+      const { ChatGoogleGenerativeAI } = await import("@langchain/google-genai");
+      return new ChatGoogleGenerativeAI({
+        apiKey: params.googleKey,
+        model: params.googleModelName,
+        temperature: params.temperature,
+        baseUrl: params.googleBaseUrl || undefined,
+      });
+    }
+
+    const { ChatOpenAI } = await import("@langchain/openai");
+    return new ChatOpenAI({
+      apiKey: params.openaiKey,
+      model: params.openaiModelName,
+      temperature: params.temperature,
+      configuration: params.openaiBaseUrl
+        ? { baseURL: params.openaiBaseUrl }
+        : undefined,
+    });
+  })();
+
+  modelCache.set(cacheKey, modelPromise);
+  return modelPromise;
+}

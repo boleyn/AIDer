@@ -1,0 +1,134 @@
+.assistant-thread {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+.assistant-viewport {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  min-height: 0;
+}
+
+.assistant-message {
+  width: 100%;
+}
+
+.assistant-bubble {
+  max-width: 90%;
+}
+
+.assistant-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  background: #ffffff;
+  padding-top: 8px;
+}
+
+.assistant-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 8px 0 4px;
+}
+
+.assistant-input {
+  flex: 1;
+  resize: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  background: #ffffff;
+  color: #1f2937;
+}
+
+.assistant-input::placeholder {
+  color: #9ca3af;
+}
+
+.assistant-input:focus {
+  outline: none;
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 1px #94a3b8;
+}
+
+.assistant-send {
+  border: none;
+  border-radius: 999px;
+  background: #111827;
+  color: #ffffff;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.assistant-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.assistant-markdown {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #374151;
+}
+
+.assistant-markdown p {
+  margin: 0;
+}
+
+.assistant-markdown p + p {
+  margin-top: 0.75rem;
+}
+
+.assistant-markdown ul,
+.assistant-markdown ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.assistant-markdown code {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85em;
+  background: rgba(15, 23, 42, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 6px;
+}
+
+.assistant-markdown pre {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.assistant-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.assistant-markdown a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.assistant-markdown blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid #e5e7eb;
+  color: #6b7280;
+}

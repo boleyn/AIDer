@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tool, type ToolInterface } from "@langchain/core/tools";
+import { tool, type ToolInterface } from "langchain";
 import { getProject, updateFile } from "./projectStorage";
 
 export type ChangeTracker = {

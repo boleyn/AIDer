@@ -234,11 +234,13 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
   }, []);
 
   const handleAgentFilesUpdated = useCallback((updated: Record<string, { code: string }>) => {
-    latestFilesRef.current = {
-      ...(latestFilesRef.current || {}),
+    const merged = {
+      ...(latestFilesRef.current || files || {}),
       ...updated,
     };
-  }, []);
+    latestFilesRef.current = merged;
+    setFiles(merged);
+  }, [files]);
 
   const handleProjectNameChange = useCallback(async (newName: string) => {
     if (!token || !newName.trim() || newName === projectName) {
