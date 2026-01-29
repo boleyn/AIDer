@@ -1,26 +1,64 @@
-import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
+import type { GetServerSideProps } from "next";
+import type { SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
 
-import StudioShell from "../../components/StudioShell";
+import StudioShell, { type SandpackFiles } from "../../components/StudioShell";
+import { getProject } from "../../utils/projectStorage";
 
-const RunPage = () => {
-  const router = useRouter();
-  const [token, setToken] = useState<string>("");
+type RunPageProps = {
+  token: string;
+  initialProject?: {
+    token: string;
+    name: string;
+    template: SandpackPredefinedTemplate;
+    files: SandpackFiles;
+    dependencies?: Record<string, string>;
+  } | null;
+};
 
-  useEffect(() => {
-    // 当路由准备好时，获取token
-    if (router.isReady) {
-      const routeToken = typeof router.query.token === "string" ? router.query.token : "";
-      setToken(routeToken);
-    }
-  }, [router.isReady, router.query.token]);
-
-  // 如果路由还没准备好，显示加载状态
-  if (!router.isReady || !token) {
+const RunPage = ({ token, initialProject }: RunPageProps) => {
+  if (!token) {
     return null;
   }
 
-  return <StudioShell initialToken={token} key={token} />;
+  return (
+    <StudioShell
+      initialToken={token}
+      initialProject={initialProject ?? undefined}
+      key={token}
+    />
+  );
+};
+
+export const getServerSideProps: GetServerSideProps<RunPageProps> = async (context) => {
+  const token = typeof context.params?.token === "string" ? context.params.token : "";
+
+  if (!token) {
+    return { notFound: true };
+  }
+
+  const project = await getProject(token);
+
+  if (!project) {
+    return {
+      props: {
+        token,
+        initialProject: null,
+      },
+    };
+  }
+
+  return {
+    props: {
+      token,
+      initialProject: {
+        token: project.token,
+        name: project.name,
+        template: project.template as SandpackPredefinedTemplate,
+        files: project.files,
+        dependencies: project.dependencies || {},
+      },
+    },
+  };
 };
 
 export default RunPage;

@@ -16,6 +16,13 @@ type ProjectStatus = "idle" | "loading" | "ready" | "error";
 
 type StudioShellProps = {
   initialToken?: string;
+  initialProject?: {
+    token: string;
+    name: string;
+    template: SandpackPredefinedTemplate;
+    files: SandpackFiles;
+    dependencies?: Record<string, string>;
+  };
 };
 
 type ActiveView = "preview" | "code";
@@ -80,18 +87,27 @@ const normalizeFiles = (rawFiles: unknown): SandpackFiles | null => {
   return Object.keys(output).length > 0 ? output : null;
 };
 
-const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
+const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) => {
   const [token, setToken] = useState(initialToken);
-  const [status, setStatus] = useState<ProjectStatus>(
-    initialToken ? "loading" : "idle"
-  );
+  const [status, setStatus] = useState<ProjectStatus>(() => {
+    if (initialProject && initialProject.token === initialToken) {
+      return "ready";
+    }
+    return initialToken ? "loading" : "idle";
+  });
   const [error, setError] = useState("");
-  const [template, setTemplate] = useState<SandpackPredefinedTemplate>(DEFAULT_TEMPLATE);
-  const [files, setFiles] = useState<SandpackFiles | null>(null);
-  const latestFilesRef = useRef<SandpackFiles | null>(null);
-  const [dependencies, setDependencies] = useState<Record<string, string>>({});
+  const [template, setTemplate] = useState<SandpackPredefinedTemplate>(
+    initialProject?.template || DEFAULT_TEMPLATE
+  );
+  const [files, setFiles] = useState<SandpackFiles | null>(
+    initialProject?.files || null
+  );
+  const latestFilesRef = useRef<SandpackFiles | null>(initialProject?.files || null);
+  const [dependencies, setDependencies] = useState<Record<string, string>>(
+    initialProject?.dependencies || {}
+  );
   const [activeView, setActiveView] = useState<ActiveView>("code");
-  const [projectName, setProjectName] = useState<string>("");
+  const [projectName, setProjectName] = useState<string>(initialProject?.name || "");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const loadProject = useCallback(async (requestedToken: string) => {
@@ -142,11 +158,17 @@ const StudioShell = ({ initialToken = "" }: StudioShellProps) => {
     if (!initialToken) {
       return;
     }
+    if (initialProject && initialProject.token === initialToken) {
+      if (initialToken !== token) {
+        setToken(initialToken);
+      }
+      return;
+    }
     if (initialToken !== token) {
       setToken(initialToken);
     }
     loadProject(initialToken);
-  }, [initialToken, token, loadProject]);
+  }, [initialToken, token, loadProject, initialProject]);
 
   const sandpackFiles = useMemo<SandpackFiles>(
     () => files || fallbackFiles,
