@@ -62,11 +62,16 @@ const MarkdownText: TextMessagePartComponent = () => (
   <MarkdownTextPrimitive className="assistant-markdown" />
 );
 
+const ToolGroup = ({ children }: { children: ReactNode }) => (
+  <Box className="assistant-tool-group">{children}</Box>
+);
+
 const messagePartsComponents = {
   Text: MarkdownText,
   tools: {
     Override: ToolCallCard,
   },
+  ToolGroup,
 } as const;
 
 const toAgentMessage = (message: LangChainMessage): AgentMessage => {

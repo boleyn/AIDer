@@ -179,6 +179,114 @@ const serializeMessageChunk = (chunk: unknown): LangChainMessageChunkShape | nul
   };
 };
 
+const normalizeLangChainMessage = (
+  value: unknown
+): LangChainMessageShape | LangChainMessageChunkShape | null => {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, any>;
+
+  const normalizeToolCallChunks = (chunks: unknown): ToolCallChunk[] | undefined => {
+    if (!Array.isArray(chunks)) return undefined;
+    return chunks.map((chunk, index) => ({
+      ...(chunk ?? {}),
+      index: typeof (chunk as ToolCallChunk).index === "number" ? (chunk as ToolCallChunk).index : index + 1,
+    })) as ToolCallChunk[];
+  };
+
+  if (typeof record.type === "string") {
+    if (record.type === "AIMessageChunk") {
+      return record as LangChainMessageChunkShape;
+    }
+    if (
+      record.type === "ai" ||
+      record.type === "human" ||
+      record.type === "system" ||
+      record.type === "tool"
+    ) {
+      return record as LangChainMessageShape;
+    }
+  }
+
+  if (record.lc === 1 && record.type === "constructor" && Array.isArray(record.id)) {
+    const kind = record.id[record.id.length - 1];
+    const kwargs = record.kwargs ?? {};
+    switch (kind) {
+      case "AIMessageChunk":
+        return {
+          type: "AIMessageChunk",
+          id: kwargs.id,
+          content: kwargs.content,
+          tool_call_chunks: normalizeToolCallChunks(kwargs.tool_call_chunks),
+        };
+      case "AIMessage":
+        return {
+          type: "ai",
+          id: kwargs.id,
+          content: kwargs.content,
+          tool_calls: kwargs.tool_calls,
+          tool_call_chunks: normalizeToolCallChunks(kwargs.tool_call_chunks),
+          status: kwargs.status,
+          additional_kwargs: kwargs.additional_kwargs,
+        };
+      case "HumanMessage":
+        return {
+          type: "human",
+          id: kwargs.id,
+          content: kwargs.content,
+        };
+      case "SystemMessage":
+        return {
+          type: "system",
+          id: kwargs.id,
+          content: kwargs.content,
+        };
+      case "ToolMessage":
+        return {
+          type: "tool",
+          id: kwargs.id,
+          content: kwargs.content,
+          tool_call_id: kwargs.tool_call_id,
+          name: kwargs.name,
+          status: kwargs.status ?? "success",
+          artifact: kwargs.artifact,
+        };
+      default:
+        return null;
+    }
+  }
+
+  return null;
+};
+
+const extractNestedMessages = (payload: unknown): Array<LangChainMessageShape | LangChainMessageChunkShape> => {
+  const collected: Array<LangChainMessageShape | LangChainMessageChunkShape> = [];
+
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+
+    const record = value as Record<string, unknown>;
+    const maybeMessages = record.messages;
+    if (Array.isArray(maybeMessages)) {
+      for (const message of maybeMessages) {
+        const normalized = normalizeLangChainMessage(message);
+        if (normalized) collected.push(normalized);
+      }
+    }
+
+    for (const key of Object.keys(record)) {
+      if (key === "messages") continue;
+      visit(record[key]);
+    }
+  };
+
+  visit(payload);
+  return collected;
+};
+
 
 function formatGlobalResult(result: GlobalToolResult): string {
   if (!result.ok) {
@@ -371,6 +479,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
             const tuple = Array.isArray(payload)
               ? (payload as [unknown, unknown])
               : [payload, undefined];
+            const meta = tuple?.[1] as { langgraph_node?: string; name?: string } | undefined;
+            if (meta?.langgraph_node === "tools" || meta?.name === "tools") {
+              return;
+            }
             const tupleValue = tuple?.[0];
             const messageChunk =
               serializeMessageChunk(tupleValue) ||
@@ -393,6 +505,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
                 messages: state.messages.map(serializeMessage),
               });
             } else {
+              const nestedMessages = extractNestedMessages(payload);
+              if (nestedMessages.length > 0) {
+                sendEvent("messages/complete", nestedMessages);
+              }
               sendEvent("updates", state);
             }
             return;
