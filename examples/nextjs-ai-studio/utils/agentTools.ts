@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { tool, type ToolInterface } from "langchain";
 import { getProject, updateFile } from "./projectStorage";
 
 export type ChangeTracker = {
@@ -23,7 +22,7 @@ export type GlobalToolResult = {
   data?: Record<string, unknown>;
 };
 
-const globalToolSchema = z.object({
+export const globalToolSchema = z.object({
   action: z.enum(["list", "read", "write", "replace", "search"]),
   path: z.string().optional(),
   content: z.string().optional(),
@@ -250,99 +249,4 @@ export function parseGlobalCommand(text: string): GlobalCommandParseResult | nul
     message: "该操作建议使用 JSON 参数。",
     hint: "示例: /global {\"action\":\"replace\",\"path\":\"/App.js\",\"query\":\"foo\",\"replace\":\"bar\"}",
   };
-}
-
-export function createProjectTools(token: string, changeTracker: ChangeTracker): ToolInterface[] {
-  const readFileTool = tool(
-    async (input: { path: string }) => {
-      return runGlobalAction(token, { action: "read", path: input.path }, changeTracker);
-    },
-    {
-      name: "read_file",
-      description: "读取项目中的文件内容。",
-      schema: z.object({
-        path: z.string().describe("以 / 开头的文件路径"),
-      }),
-    }
-  );
-
-  const listFilesTool = tool(
-    async () => {
-      return runGlobalAction(token, { action: "list" }, changeTracker);
-    },
-    {
-      name: "list_files",
-      description: "列出项目所有文件路径。",
-      schema: z.object({}),
-    }
-  );
-
-  const writeFileTool = tool(
-    async (input: { path: string; content: string }) => {
-      return runGlobalAction(
-        token,
-        { action: "write", path: input.path, content: input.content },
-        changeTracker
-      );
-    },
-    {
-      name: "write_file",
-      description: "新建或覆盖文件内容。",
-      schema: z.object({
-        path: z.string().describe("文件路径"),
-        content: z.string().describe("完整文件内容"),
-      }),
-    }
-  );
-
-  const replaceTool = tool(
-    async (input: { path: string; query: string; replace: string }) => {
-      return runGlobalAction(
-        token,
-        { action: "replace", path: input.path, query: input.query, replace: input.replace },
-        changeTracker
-      );
-    },
-    {
-      name: "replace_in_file",
-      description: "在指定文件中替换内容。",
-      schema: z.object({
-        path: z.string().describe("文件路径"),
-        query: z.string().describe("要查找的文本"),
-        replace: z.string().describe("替换后的文本"),
-      }),
-    }
-  );
-
-  const searchTool = tool(
-    async (input: { query: string; limit?: number }) => {
-      return runGlobalAction(
-        token,
-        { action: "search", query: input.query, limit: input.limit },
-        changeTracker
-      );
-    },
-    {
-      name: "search_in_files",
-      description: "在所有文件中搜索关键字。",
-      schema: z.object({
-        query: z.string().describe("搜索关键字"),
-        limit: z.number().int().min(1).max(200).optional(),
-      }),
-    }
-  );
-
-  const globalTool = tool(
-    async (input: GlobalToolInput) => {
-      return runGlobalAction(token, input, changeTracker);
-    },
-    {
-      name: "global",
-      description:
-        "通用文件操作工具，支持 list/read/write/replace/search，用于 AI IDE 的全局指令。",
-      schema: globalToolSchema,
-    }
-  );
-
-  return [listFilesTool, readFileTool, writeFileTool, replaceTool, searchTool, globalTool];
 }

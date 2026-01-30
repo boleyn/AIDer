@@ -198,6 +198,127 @@ const ChatPanelBody = ({ token, historyRef }: ChatPanelBodyProps) => {
 const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) => {
   const historyRef = useRef<LangChainMessage[]>([]);
 
+  const isLangChainMessage = (value: unknown): value is LangChainMessage => {
+    if (!value || typeof value !== "object") return false;
+    const record = value as { type?: string };
+    return (
+      record.type === "ai" ||
+      record.type === "human" ||
+      record.type === "system" ||
+      record.type === "tool"
+    );
+  };
+
+  const normalizeToolCallChunks = (chunks: unknown) => {
+    if (!Array.isArray(chunks)) return undefined;
+    return chunks.map((chunk, index) => {
+      const record = chunk as { index?: number };
+      return {
+        ...(chunk ?? {}),
+        index: typeof record.index === "number" ? record.index : index + 1,
+      };
+    });
+  };
+
+  const normalizeLangChainMessage = (
+    value: unknown
+  ): LangChainMessage | { type: "AIMessageChunk"; [key: string]: unknown } | null => {
+    if (!value || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+
+    if (typeof record.type === "string") {
+      if (
+        record.type === "AIMessageChunk" ||
+        record.type === "ai" ||
+        record.type === "human" ||
+        record.type === "system" ||
+        record.type === "tool"
+      ) {
+        if (record.type === "AIMessageChunk") {
+          return {
+            ...record,
+            tool_call_chunks: normalizeToolCallChunks(record.tool_call_chunks),
+          } as { type: "AIMessageChunk" };
+        }
+        return record as LangChainMessage;
+      }
+    }
+
+    if (
+      record.lc === 1 &&
+      record.type === "constructor" &&
+      Array.isArray(record.id)
+    ) {
+      const kind = record.id[record.id.length - 1];
+      const kwargs = (record.kwargs ?? {}) as Record<string, unknown>;
+
+      if (kind === "AIMessageChunk") {
+        return {
+          type: "AIMessageChunk",
+          id: kwargs.id,
+          content: kwargs.content,
+          tool_call_chunks: normalizeToolCallChunks(kwargs.tool_call_chunks),
+        };
+      }
+      if (kind === "AIMessage") {
+        return {
+          type: "ai",
+          id: kwargs.id,
+          content: kwargs.content,
+          tool_calls: kwargs.tool_calls,
+          tool_call_chunks: normalizeToolCallChunks(kwargs.tool_call_chunks),
+          status: kwargs.status,
+          additional_kwargs: kwargs.additional_kwargs,
+        } as LangChainMessage;
+      }
+      if (kind === "HumanMessage") {
+        return { type: "human", id: kwargs.id, content: kwargs.content } as LangChainMessage;
+      }
+      if (kind === "SystemMessage") {
+        return { type: "system", id: kwargs.id, content: kwargs.content } as LangChainMessage;
+      }
+      if (kind === "ToolMessage") {
+        return {
+          type: "tool",
+          id: kwargs.id,
+          content: kwargs.content,
+          tool_call_id: kwargs.tool_call_id,
+          name: kwargs.name,
+          status: kwargs.status ?? "success",
+          artifact: kwargs.artifact,
+        } as LangChainMessage;
+      }
+    }
+
+    return null;
+  };
+
+  const normalizeMessagesPayload = (payload: unknown): LangChainMessage[] => {
+    if (Array.isArray(payload)) {
+      return payload
+        .map(normalizeLangChainMessage)
+        .filter((message): message is LangChainMessage => !!message && isLangChainMessage(message));
+    }
+    const normalized = normalizeLangChainMessage(payload);
+    if (normalized && isLangChainMessage(normalized)) {
+      return [normalized];
+    }
+    return [];
+  };
+
+  const isLangChainMessageChunk = (value: unknown): value is { type: "AIMessageChunk" } => {
+    const normalized = normalizeLangChainMessage(value);
+    if (!normalized || typeof normalized !== "object") return false;
+    const chunk = normalized as { type?: string; content?: unknown; tool_call_chunks?: unknown };
+    const contentOk =
+      chunk.content === undefined ||
+      typeof chunk.content === "string" ||
+      Array.isArray(chunk.content);
+    const toolChunksOk =
+      chunk.tool_call_chunks === undefined || Array.isArray(chunk.tool_call_chunks);
+    return chunk.type === "AIMessageChunk" && contentOk && toolChunksOk;
+  };
+
   const stream = useCallback<LangGraphStreamCallback<LangChainMessage>>(
     async function* (newMessages, { abortSignal, initialize }) {
       const systemEvent = (text: string): LangGraphMessagesEvent<LangChainMessage> => ({
@@ -323,12 +444,12 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
           if (eventName === "updates") {
             const update = payload as { messages?: LangChainMessage[] };
             if (Array.isArray(update?.messages)) {
-              historyRef.current = update.messages;
+              historyRef.current = normalizeMessagesPayload(update.messages);
             }
           }
           if (eventName === "messages/complete") {
-            const complete = payload as LangChainMessage[];
-            if (Array.isArray(complete)) {
+            const complete = normalizeMessagesPayload(payload);
+            if (complete.length > 0) {
               historyRef.current = [...historyRef.current, ...complete];
             }
           }
@@ -338,6 +459,42 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
             continue;
           }
 
+          if (eventName === "messages/complete" || eventName === "messages/partial") {
+            const complete = normalizeMessagesPayload(payload);
+            if (complete.length === 0) {
+              if (Array.isArray(payload) && isLangChainMessageChunk(payload[0])) {
+                const normalizedChunk = normalizeLangChainMessage(payload[0]);
+                if (normalizedChunk && typeof normalizedChunk === "object") {
+                  yield {
+                    event: "messages",
+                    data: [normalizedChunk, payload[1]],
+                  } as LangGraphMessagesEvent<LangChainMessage>;
+                }
+              }
+              continue;
+            }
+            yield {
+              event: eventName as LangGraphMessagesEvent<LangChainMessage>["event"],
+              data: complete,
+            } as LangGraphMessagesEvent<LangChainMessage>;
+            continue;
+          }
+          if (eventName === "messages") {
+            if (!Array.isArray(payload) || !isLangChainMessageChunk(payload[0])) {
+              console.warn("Invalid messages payload, skipped:", payload);
+              continue;
+            }
+            const normalizedChunk = normalizeLangChainMessage(payload[0]);
+            if (normalizedChunk && typeof normalizedChunk === "object") {
+              payload = [normalizedChunk, payload[1]] as unknown;
+            }
+          }
+          if (eventName === "updates") {
+            const update = payload as { messages?: LangChainMessage[] };
+            if (Array.isArray(update?.messages)) {
+              update.messages = normalizeMessagesPayload(update.messages);
+            }
+          }
           yield {
             event: eventName as LangGraphMessagesEvent<LangChainMessage>["event"],
             data: payload,

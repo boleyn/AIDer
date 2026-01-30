@@ -62,27 +62,39 @@ export const ToolCallCard: ToolCallMessagePartComponent = ({
   status,
   messages,
 }) => {
+  const statusLabel =
+    status?.type === "running"
+      ? "运行中"
+      : status?.type === "requires-action"
+        ? "等待操作"
+        : isError
+          ? "失败"
+          : "完成";
+  const statusColor =
+    status?.type === "running"
+      ? "blue"
+      : status?.type === "requires-action"
+        ? "orange"
+        : isError
+          ? "red"
+          : "green";
   const outputMessages = [
     ...(messages ? messages.flatMap(readTextFromThreadMessage) : []),
     ...readTextFromValue(result),
   ].filter((text) => text.trim().length > 0);
 
+  const shouldOpen = status?.type === "running" || isError;
   const argsMarkdown = toJsonBlock(argsText?.trim() ? argsText : args);
+  const resultMarkdown = toJsonBlock(result ?? "暂无输出。");
 
   return (
-    <Box as="details" className="assistant-tool" open={false}>
+    <Box as="details" className="assistant-tool" open={shouldOpen}>
       <Box as="summary" className="assistant-tool-summary">
         <Flex align="center" gap={2}>
           <Text fontSize="sm" fontWeight="600" color="gray.700">
             工具调用：{toolName}
           </Text>
-          {status?.type === "running" ? (
-            <Badge colorScheme="blue">运行中</Badge>
-          ) : isError ? (
-            <Badge colorScheme="red">失败</Badge>
-          ) : (
-            <Badge colorScheme="green">完成</Badge>
-          )}
+          <Badge colorScheme={statusColor}>{statusLabel}</Badge>
         </Flex>
         <Text fontSize="xs" color="gray.500">
           点击展开
@@ -94,7 +106,7 @@ export const ToolCallCard: ToolCallMessagePartComponent = ({
           <MarkdownTextFromString text={argsMarkdown} />
         </Box>
         <Box className="assistant-tool-card">
-          <Text className="assistant-tool-title">输出</Text>
+          <Text className="assistant-tool-title">{isError ? "错误" : "输出"}</Text>
           {outputMessages.length > 0 ? (
             <Stack spacing={3}>
               {outputMessages.map((message, index) => (
@@ -102,7 +114,7 @@ export const ToolCallCard: ToolCallMessagePartComponent = ({
               ))}
             </Stack>
           ) : (
-            <MarkdownTextFromString text={toJsonBlock(result ?? "暂无输出。")} />
+            <MarkdownTextFromString text={resultMarkdown} />
           )}
         </Box>
       </Box>
