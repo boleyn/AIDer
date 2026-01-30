@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { isAIMessage, isToolMessage } from "@langchain/core/messages";
-import { createAgent } from "langchain";
+import { isAIMessage, isToolMessage, trimMessages } from "@langchain/core/messages";
+import { createAgent, createMiddleware, summarizationMiddleware } from "langchain";
 import { getAgentRuntimeConfig } from "../../utils/agentConfig";
 
 import { SYSTEM_PROMPT } from "../../utils/agentPrompt";
@@ -9,10 +9,21 @@ import { formatGlobalResult } from "../../utils/agent/globalResultFormatter";
 import { getCachedModel } from "../../utils/agent/modelCache";
 import { createSseHelpers, consumeAgentStream } from "../../utils/agent/streaming";
 import type { IncomingMessage } from "../../utils/agent/messageSerialization";
-import { extractText, toBaseMessage } from "../../utils/agent/messageSerialization";
+import {
+  extractText,
+  serializeMessage,
+  type LangChainMessageShape,
+  toBaseMessage,
+} from "../../utils/agent/messageSerialization";
 import { createProjectTools } from "../../utils/agent/tools";
 import { loadMcpTools } from "../../utils/mcpClient";
 import { getProject } from "../../utils/projectStorage";
+import {
+  getConversation,
+  appendConversationMessages,
+  replaceConversationMessages,
+  type ConversationMessage,
+} from "../../utils/conversationStorage";
 
 type AgentResponse = {
   message: string;
@@ -47,15 +58,75 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
   }
 
   const lastMessage = incomingMessages[incomingMessages.length - 1];
+  const conversationId =
+    typeof req.body?.conversationId === "string" ? req.body.conversationId : undefined;
+
+  const normalizeIncomingMessages = (messages: IncomingMessage[]): ConversationMessage[] =>
+    messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      name: message.name,
+      tool_call_id: message.tool_call_id,
+    }));
+
+  const toConversationMessage = (
+    message: LangChainMessageShape
+  ): ConversationMessage => {
+    if (message.type === "human") {
+      return { role: "user", content: message.content };
+    }
+    if (message.type === "ai") {
+      return { role: "assistant", content: message.content };
+    }
+    if (message.type === "system") {
+      return { role: "system", content: message.content };
+    }
+    return {
+      role: "tool",
+      content: message.content,
+      name: message.name,
+      tool_call_id: message.tool_call_id,
+    };
+  };
+
+  const getTitleFromMessages = (messages: ConversationMessage[]): string | undefined => {
+    const firstUser = messages.find((message) => message.role === "user");
+    if (!firstUser) return undefined;
+    const text = extractText(firstUser.content).trim();
+    if (!text) return undefined;
+    return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+  };
+
+  const conversation = conversationId ? await getConversation(token, conversationId) : null;
+  if (conversationId && !conversation) {
+    res.status(404).json({ message: "", error: "对话不存在" });
+    return;
+  }
+
+  const historyMessages = conversation?.messages ?? [];
+  const newMessages = normalizeIncomingMessages(incomingMessages);
+  const contextMessages = [...historyMessages, ...newMessages];
   const shouldStream =
     (typeof req.query.stream === "string" && req.query.stream !== "0") ||
     req.body?.stream === true;
+
+  const appendAssistantError = async (text: string) => {
+    if (!conversationId) return;
+    await appendConversationMessages(token, conversationId, [
+      { role: "assistant", content: text },
+    ]);
+  };
+
+  if (conversationId && newMessages.length > 0) {
+    await appendConversationMessages(token, conversationId, newMessages);
+  }
 
   const { sendEvent, startStream } = createSseHelpers(res);
   if (lastMessage?.role === "user" && typeof lastMessage.content === "string") {
     const parsed = parseGlobalCommand(lastMessage.content);
     if (parsed) {
       if (!parsed.ok) {
+        await appendAssistantError(parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""));
         if (shouldStream) {
           startStream();
           sendEvent("messages/complete", [
@@ -87,13 +158,24 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
             return output;
           })
         : undefined;
+      const assistantResponse = formatGlobalResult(result);
+
+      if (conversationId) {
+        const storedMessages = [
+          ...contextMessages,
+          { role: "assistant", content: assistantResponse } as ConversationMessage,
+        ];
+        const nextTitle =
+          conversation?.title === "新对话" ? getTitleFromMessages(storedMessages) : undefined;
+        await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
+      }
 
       if (shouldStream) {
         startStream();
         sendEvent("messages/complete", [
           {
             type: "ai",
-            content: formatGlobalResult(result),
+            content: assistantResponse,
           },
         ]);
         if (updatedFiles) {
@@ -103,7 +185,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
         res.end();
         return;
       }
-      res.status(200).json({ message: formatGlobalResult(result), updatedFiles });
+      res.status(200).json({ message: assistantResponse, updatedFiles });
       return;
     }
   }
@@ -116,17 +198,23 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
   const googleBaseUrl = runtimeConfig.googleBaseUrl;
 
   if (provider === "openai" && !openaiKey) {
+    const errorMessage =
+      "缺少 OPENAI_API_KEY，无法调用模型。可以用 /global 指令执行文件操作。";
+    await appendAssistantError(errorMessage);
     res.status(400).json({
       message: "",
-      error: "缺少 OPENAI_API_KEY，无法调用模型。可以用 /global 指令执行文件操作。",
+      error: errorMessage,
     });
     return;
   }
 
   if (provider === "google" && !googleKey) {
+    const errorMessage =
+      "缺少 GOOGLE_API_KEY，无法调用模型。可以用 /global 指令执行文件操作。";
+    await appendAssistantError(errorMessage);
     res.status(400).json({
       message: "",
-      error: "缺少 GOOGLE_API_KEY，无法调用模型。可以用 /global 指令执行文件操作。",
+      error: errorMessage,
     });
     return;
   }
@@ -147,22 +235,65 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     temperature: runtimeConfig.temperature,
   });
 
+  const trimMessageHistory = createMiddleware({
+    name: "TrimMessages",
+    beforeModel: async (state) => {
+      const approximateTokenCount = (messages: { content?: unknown }[]) =>
+        messages.reduce((total, message) => {
+          const text = extractText(message?.content ?? "");
+          return total + Math.ceil(text.length / 4);
+        }, 0);
+      const trimmed = await trimMessages(state.messages, {
+        maxTokens: 2000,
+        strategy: "last",
+        startOn: "human",
+        endOn: ["human", "tool"],
+        tokenCounter: approximateTokenCount,
+      });
+      return { messages: trimmed };
+    },
+  });
+
+  const summarization = summarizationMiddleware({
+    model,
+    trigger: { tokens: 4000 },
+    keep: { messages: 20 },
+  });
+
   const agent = createAgent({
     model,
     tools: allTools,
     systemPrompt: SYSTEM_PROMPT,
+    middleware: [summarization, trimMessageHistory],
   });
 
   if (shouldStream) {
     startStream();
     try {
       const stream = await agent.stream(
-        { messages: incomingMessages.map(toBaseMessage) },
+        { messages: contextMessages.map(toBaseMessage) },
         { streamMode: ["messages", "updates"] }
       );
 
-      await consumeAgentStream(stream, sendEvent);
+      const completeMessages: LangChainMessageShape[] = [];
+
+      await consumeAgentStream(stream, sendEvent, {
+        onCompleteMessages: (messages) => {
+          completeMessages.push(...messages);
+        },
+      });
+
+      if (conversationId) {
+        const storedMessages = [
+          ...contextMessages,
+          ...completeMessages.map(toConversationMessage),
+        ];
+        const nextTitle =
+          conversation?.title === "新对话" ? getTitleFromMessages(storedMessages) : undefined;
+        await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
+      }
     } catch (error) {
+      await appendAssistantError(error instanceof Error ? error.message : "请求失败");
       sendEvent("error", {
         error: error instanceof Error ? error.message : "请求失败",
       });
@@ -193,7 +324,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
   }
 
   const result = await agent.invoke({
-    messages: incomingMessages.map(toBaseMessage),
+    messages: contextMessages.map(toBaseMessage),
   });
   const outputMessages = Array.isArray(result?.messages) ? result.messages : [];
   const toolMessages = outputMessages.filter(isToolMessage);
@@ -202,6 +333,17 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     result: message.content,
   }));
   const aiMessage = [...outputMessages].reverse().find(isAIMessage);
+
+  if (conversationId) {
+    const serializedOutput = outputMessages.map(serializeMessage);
+    const storedMessages =
+      serializedOutput.length >= contextMessages.length
+        ? serializedOutput.map(toConversationMessage)
+        : [...contextMessages, ...serializedOutput.map(toConversationMessage)];
+    const nextTitle =
+      conversation?.title === "新对话" ? getTitleFromMessages(storedMessages) : undefined;
+    await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
+  }
 
   const updatedFiles = tracker.changed
     ? await getProject(token).then((data) => {

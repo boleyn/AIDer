@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Flex } from "@chakra-ui/react";
 import { SandpackProvider, type SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
+import dynamic from "next/dynamic";
 import { githubLight } from "@codesandbox/sandpack-themes";
 
 import TopBar from "./TopBar";
-import ChatPanel from "./ChatPanel";
+const ChatPanel = dynamic(() => import("../features/chat/components/ChatPanel"), {
+  ssr: false,
+});
 import WorkspaceShell from "./WorkspaceShell";
 import type { SaveStatus } from "./CodeChangeListener";
 import CodeChangeListener from "./CodeChangeListener";

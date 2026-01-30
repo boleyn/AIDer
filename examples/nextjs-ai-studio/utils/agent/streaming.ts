@@ -3,9 +3,14 @@ import {
   extractNestedMessages,
   serializeMessage,
   serializeMessageChunk,
+  type LangChainMessageShape,
 } from "./messageSerialization";
 
 type SendEvent = (event: string, data: unknown) => void;
+type StreamCollector = {
+  onStateMessages?: (messages: LangChainMessageShape[]) => void;
+  onCompleteMessages?: (messages: LangChainMessageShape[]) => void;
+};
 
 type StreamStatePayload = {
   messages?: BaseMessage[];
@@ -20,7 +25,12 @@ const isTupleLike = (chunk: unknown): chunk is [unknown, unknown] =>
     "1" in chunk &&
     Object.keys(chunk as Record<string, unknown>).length === 2);
 
-const handleStreamEntry = (mode: string, payload: unknown, sendEvent: SendEvent) => {
+const handleStreamEntry = (
+  mode: string,
+  payload: unknown,
+  sendEvent: SendEvent,
+  collector?: StreamCollector
+) => {
   if (mode === "messages") {
     const tuple = Array.isArray(payload)
       ? (payload as [unknown, unknown])
@@ -46,10 +56,12 @@ const handleStreamEntry = (mode: string, payload: unknown, sendEvent: SendEvent)
   if (mode === "updates") {
     const state = payload as StreamStatePayload;
     if (Array.isArray(state.messages)) {
+      const serializedMessages = state.messages.map(serializeMessage);
       sendEvent("updates", {
         ...state,
-        messages: state.messages.map(serializeMessage),
+        messages: serializedMessages,
       });
+      collector?.onStateMessages?.(serializedMessages);
     } else {
       const nestedMessages = extractNestedMessages(payload);
       const completeMessages = nestedMessages.filter(
@@ -57,6 +69,7 @@ const handleStreamEntry = (mode: string, payload: unknown, sendEvent: SendEvent)
       );
       if (completeMessages.length > 0) {
         sendEvent("messages/complete", completeMessages);
+        collector?.onCompleteMessages?.(completeMessages);
       }
       sendEvent("updates", state);
     }
@@ -68,7 +81,8 @@ const handleStreamEntry = (mode: string, payload: unknown, sendEvent: SendEvent)
 
 export async function consumeAgentStream(
   stream: AsyncIterable<unknown>,
-  sendEvent: SendEvent
+  sendEvent: SendEvent,
+  collector?: StreamCollector
 ) {
   for await (const chunk of stream) {
     if (!chunk) continue;
@@ -86,18 +100,18 @@ export async function consumeAgentStream(
             (chunk as Record<string, unknown>)[0],
             (chunk as Record<string, unknown>)[1],
           ];
-      handleStreamEntry(String(tuple[0]), tuple[1], sendEvent);
+      handleStreamEntry(String(tuple[0]), tuple[1], sendEvent, collector);
       continue;
     }
 
     if (typeof chunk === "object") {
       const record = chunk as Record<string, unknown>;
       if ("event" in record && "data" in record) {
-        handleStreamEntry(String(record.event), record.data, sendEvent);
+        handleStreamEntry(String(record.event), record.data, sendEvent, collector);
         continue;
       }
       for (const [mode, payload] of Object.entries(record)) {
-        handleStreamEntry(mode, payload, sendEvent);
+        handleStreamEntry(mode, payload, sendEvent, collector);
       }
     }
   }
