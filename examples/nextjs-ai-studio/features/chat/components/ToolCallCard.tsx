@@ -1,6 +1,7 @@
 import { Badge, Box, Flex, Stack, Text } from "@chakra-ui/react";
 import { type ThreadMessage, TextMessagePartProvider, type ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+import { ChevronDownIcon } from "../../../components/common/Icon";
 
 const MarkdownTextFromString = ({ text }: { text: string }) => (
   <TextMessagePartProvider text={text}>
@@ -96,9 +97,9 @@ export const ToolCallCard: ToolCallMessagePartComponent = ({
           </Text>
           <Badge colorScheme={statusColor}>{statusLabel}</Badge>
         </Flex>
-        <Text fontSize="xs" color="gray.500">
-          点击展开
-        </Text>
+        <Box className="assistant-tool-toggle" aria-hidden>
+          <ChevronDownIcon />
+        </Box>
       </Box>
       <Box className="assistant-tool-body">
         <Box className="assistant-tool-card">

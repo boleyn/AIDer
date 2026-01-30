@@ -216,8 +216,29 @@
   cursor: pointer;
 }
 
+.assistant-tool-summary:focus,
+.assistant-tool-summary:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .assistant-tool-summary::-webkit-details-marker {
   display: none;
+}
+
+.assistant-tool-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: #64748b;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.assistant-tool[open] .assistant-tool-toggle {
+  transform: rotate(180deg);
+  color: #334155;
 }
 
 .assistant-tool-body {

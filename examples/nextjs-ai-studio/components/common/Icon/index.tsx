@@ -17,3 +17,4 @@ export { default as EditIcon } from "./icons/edit.svg";
 export { default as PencilIcon } from "./icons/pencil.svg";
 export { default as AttachIcon } from "./icons/attach.svg";
 export { default as MicIcon } from "./icons/mic.svg";
+export { default as ChevronDownIcon } from "./icons/chevron-down.svg";
