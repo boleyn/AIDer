@@ -65,27 +65,42 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     messages.map((message) => ({
       role: message.role,
       content: message.content,
+      id: message.id,
       name: message.name,
       tool_call_id: message.tool_call_id,
+      tool_calls: message.tool_calls,
+      tool_call_chunks: message.tool_call_chunks,
+      additional_kwargs: message.additional_kwargs,
+      status: message.status,
+      artifact: message.artifact,
     }));
 
-  const toConversationMessage = (
-    message: LangChainMessageShape
-  ): ConversationMessage => {
+  const toConversationMessage = (message: LangChainMessageShape): ConversationMessage => {
     if (message.type === "human") {
-      return { role: "user", content: message.content };
+      return { role: "user", content: message.content, id: message.id };
     }
     if (message.type === "ai") {
-      return { role: "assistant", content: message.content };
+      return {
+        role: "assistant",
+        content: message.content,
+        id: message.id,
+        tool_calls: message.tool_calls,
+        tool_call_chunks: message.tool_call_chunks,
+        additional_kwargs: message.additional_kwargs,
+        status: message.status,
+      };
     }
     if (message.type === "system") {
-      return { role: "system", content: message.content };
+      return { role: "system", content: message.content, id: message.id };
     }
     return {
       role: "tool",
       content: message.content,
+      id: message.id,
       name: message.name,
       tool_call_id: message.tool_call_id,
+      status: message.status,
+      artifact: message.artifact,
     };
   };
 
@@ -196,6 +211,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
   const googleKey = runtimeConfig.googleKey;
   const openaiBaseUrl = runtimeConfig.openaiBaseUrl;
   const googleBaseUrl = runtimeConfig.googleBaseUrl;
+  const recursionLimit = runtimeConfig.recursionLimit;
 
   if (provider === "openai" && !openaiKey) {
     const errorMessage =
@@ -272,7 +288,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     try {
       const stream = await agent.stream(
         { messages: contextMessages.map(toBaseMessage) },
-        { streamMode: ["messages", "updates"] }
+        {
+          streamMode: ["messages", "updates"],
+          ...(typeof recursionLimit === "number" ? { recursionLimit } : {}),
+        }
       );
 
       const completeMessages: LangChainMessageShape[] = [];
@@ -323,9 +342,12 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     return;
   }
 
-  const result = await agent.invoke({
-    messages: contextMessages.map(toBaseMessage),
-  });
+  const result = await agent.invoke(
+    {
+      messages: contextMessages.map(toBaseMessage),
+    },
+    typeof recursionLimit === "number" ? { recursionLimit } : undefined
+  );
   const outputMessages = Array.isArray(result?.messages) ? result.messages : [];
   const toolMessages = outputMessages.filter(isToolMessage);
   const toolResults = toolMessages.map((message) => ({

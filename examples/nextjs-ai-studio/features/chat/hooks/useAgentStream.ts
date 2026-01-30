@@ -328,6 +328,19 @@ export function useAgentStream({
               historyRef.current = normalizeMessagesPayload(update.messages);
             }
           }
+          if (eventName === "error") {
+            const record = payload as { error?: string; message?: string } | null;
+            const errorText =
+              (record?.error || record?.message || "请求失败")?.toString() ?? "请求失败";
+            const errorMessage: LangChainMessage = {
+              id: createId(),
+              type: "system",
+              content: `出错了：${errorText}`,
+            };
+            historyRef.current = [...historyRef.current, errorMessage];
+            yield { event: "messages/complete", data: [errorMessage] };
+            continue;
+          }
           if (eventName === "messages/complete") {
             const complete = normalizeMessagesPayload(payload);
             if (complete.length > 0) {

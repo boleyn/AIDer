@@ -11,10 +11,9 @@ import {
   AssistantRuntimeProvider,
   MessagePrimitive,
   ThreadPrimitive,
-  useAui,
   type TextMessagePartComponent,
 } from "@assistant-ui/react";
-import { useLangGraphRuntime, type LangChainMessage } from "@assistant-ui/react-langgraph";
+import { type LangChainMessage } from "@assistant-ui/react-langgraph";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 
 import ChatComposerBar from "./ChatComposerBar";
@@ -24,6 +23,7 @@ import { ToolCallCard } from "./ToolCallCard";
 import type { Conversation, ConversationMessage, ConversationSummary } from "../../../types/conversation";
 import { useConversations } from "../hooks/useConversations";
 import { useAgentStream } from "../hooks/useAgentStream";
+import { useChatRuntime } from "../hooks/useChatRuntime";
 import { INITIAL_ASSISTANT_MESSAGE } from "../utils/constants";
 
 type ChatPanelProps = {
@@ -183,6 +183,7 @@ type ChatPanelBodyProps = {
   activeConversation: Conversation | null;
   isLoadingConversation: boolean;
   isInitialized: boolean;
+  setRuntimeMessages: (messages: LangChainMessage[]) => void;
   onReset: () => void;
   onNewConversation: () => void;
   onSelectConversation: (id: string) => void;
@@ -195,49 +196,47 @@ const ChatPanelBody = ({
   activeConversation,
   isLoadingConversation,
   isInitialized,
+  setRuntimeMessages,
   onReset,
   onNewConversation,
   onSelectConversation,
 }: ChatPanelBodyProps) => {
-  const aui = useAui();
-
-  const toThreadMessage = useCallback((message: ConversationMessage) => {
-    if (message.role === "tool") return null;
-    return {
-      role: message.role,
-      content: normalizeStoredContent(message.content),
-    } as { role: "user" | "assistant" | "system"; content: unknown };
-  }, []);
-
   const toLangChainMessage = useCallback(
     (message: ConversationMessage): LangChainMessage => {
+      const id = message.id ?? createId();
       if (message.role === "user") {
         return {
           type: "human",
-          id: createId(),
+          id,
           content: normalizeStoredContent(message.content),
         } as LangChainMessage;
       }
       if (message.role === "assistant") {
         return {
           type: "ai",
-          id: createId(),
+          id,
           content: normalizeStoredContent(message.content),
+          tool_calls: message.tool_calls,
+          tool_call_chunks: message.tool_call_chunks,
+          additional_kwargs: message.additional_kwargs,
+          status: message.status,
         } as LangChainMessage;
       }
       if (message.role === "system") {
         return {
           type: "system",
-          id: createId(),
+          id,
           content: normalizeStoredContent(message.content),
         } as LangChainMessage;
       }
       return {
         type: "tool",
-        id: createId(),
+        id,
         content: normalizeStoredContent(message.content),
         name: message.name,
         tool_call_id: message.tool_call_id,
+        status: message.status,
+        artifact: message.artifact,
       } as LangChainMessage;
     },
     []
@@ -245,27 +244,19 @@ const ChatPanelBody = ({
 
   const resetThreadWithMessages = useCallback(
     (messages: ConversationMessage[]) => {
-      const threadMessages = messages
-        .map(toThreadMessage)
-        .filter((message): message is { role: "user" | "assistant" | "system"; content: unknown } =>
-          Boolean(message)
-        );
+      const langChainMessages = messages.map(toLangChainMessage);
+      const fallback = [
+        {
+          type: "ai",
+          id: createId(),
+          content: INITIAL_ASSISTANT_MESSAGE,
+        } as LangChainMessage,
+      ];
 
-      if (threadMessages.length === 0) {
-        aui.thread().reset([{ role: "assistant", content: INITIAL_ASSISTANT_MESSAGE }]);
-        historyRef.current = [
-          {
-            type: "ai",
-            content: INITIAL_ASSISTANT_MESSAGE,
-          },
-        ];
-        return;
-      }
-
-      aui.thread().reset(threadMessages);
-      historyRef.current = messages.map(toLangChainMessage);
+      setRuntimeMessages(langChainMessages.length > 0 ? langChainMessages : fallback);
+      historyRef.current = langChainMessages.length > 0 ? langChainMessages : fallback;
     },
-    [aui, historyRef, toLangChainMessage, toThreadMessage]
+    [historyRef, setRuntimeMessages, toLangChainMessage]
   );
 
   useEffect(() => {
@@ -322,7 +313,7 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
     setActiveConversation,
   });
 
-  const runtime = useLangGraphRuntime({
+  const { runtime, setMessages } = useChatRuntime({
     stream,
     eventHandlers: {
       onCustomEvent: (event, data) => {
@@ -359,6 +350,7 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
           activeConversation={activeConversation}
           isLoadingConversation={isLoadingConversation}
           isInitialized={isInitialized}
+          setRuntimeMessages={setMessages}
           onReset={createNewConversation}
           onNewConversation={createNewConversation}
           onSelectConversation={loadConversation}

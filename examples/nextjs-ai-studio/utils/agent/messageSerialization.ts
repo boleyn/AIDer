@@ -15,8 +15,14 @@ import {
 type IncomingMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: unknown;
+  id?: string;
   name?: string;
   tool_call_id?: string;
+  tool_calls?: ToolCall[];
+  tool_call_chunks?: ToolCallChunk[];
+  additional_kwargs?: Record<string, unknown>;
+  status?: "success" | "error";
+  artifact?: unknown;
 };
 
 const isMessageContentComplexArray = (
@@ -38,7 +44,11 @@ const normalizeMessageContent = (content: unknown): MessageContent => {
 export function toBaseMessage(message: IncomingMessage): BaseMessage {
   const content = normalizeMessageContent(message.content ?? "");
   if (message.role === "assistant") {
-    return new AIMessage({ content });
+    return new AIMessage({
+      content,
+      additional_kwargs: message.additional_kwargs,
+      tool_calls: message.tool_calls,
+    });
   }
   if (message.role === "system") {
     const systemContent =

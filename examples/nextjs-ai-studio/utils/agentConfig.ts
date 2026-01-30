@@ -2,6 +2,7 @@ export type AgentRuntimeConfig = {
   provider: "google" | "openai" | string;
   modelName: string;
   temperature: number;
+  recursionLimit?: number;
   openaiKey?: string;
   openaiBaseUrl?: string;
   googleKey?: string;
@@ -24,6 +25,9 @@ export const getAgentRuntimeConfig = (): AgentRuntimeConfig => {
     provider,
     modelName,
     temperature: Number.parseFloat(process.env.AI_TEMPERATURE || "0.2"),
+    recursionLimit: process.env.AI_RECURSION_LIMIT
+      ? Number.parseInt(process.env.AI_RECURSION_LIMIT, 50)
+      : undefined,
     openaiKey: process.env.OPENAI_API_KEY,
     openaiBaseUrl: process.env.OPENAI_BASE_URL,
     googleKey: process.env.GOOGLE_API_KEY,
