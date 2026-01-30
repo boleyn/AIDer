@@ -104,6 +104,18 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     };
   };
 
+  const normalizeStoredMessages = (messages: ConversationMessage[]) => {
+    const seen = new Set<string>();
+    const result: ConversationMessage[] = [];
+    for (const message of [...messages].reverse()) {
+      const id = message.id ?? `${Date.now()}-${Math.random()}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      result.push({ ...message, id });
+    }
+    return result.reverse();
+  };
+
   const getTitleFromMessages = (messages: ConversationMessage[]): string | undefined => {
     const lastUser = [...messages].reverse().find((message) => message.role === "user");
     if (!lastUser) return undefined;
@@ -294,18 +306,26 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
       );
 
       const completeMessages: LangChainMessageShape[] = [];
+      let latestStateMessages: LangChainMessageShape[] | null = null;
 
       await consumeAgentStream(stream, sendEvent, {
         onCompleteMessages: (messages) => {
           completeMessages.push(...messages);
         },
+        onStateMessages: (messages) => {
+          latestStateMessages = messages;
+        },
       });
 
       if (conversationId) {
-        const storedMessages = [
-          ...contextMessages,
-          ...completeMessages.map(toConversationMessage),
-        ];
+        const storedMessages = normalizeStoredMessages(
+          latestStateMessages
+            ? latestStateMessages.map(toConversationMessage)
+            : [
+                ...contextMessages,
+                ...completeMessages.map(toConversationMessage),
+              ]
+        );
         const nextTitle =
           getTitleFromMessages(storedMessages);
         await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
@@ -357,12 +377,13 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
 
   if (conversationId) {
     const serializedOutput = outputMessages.map(serializeMessage);
-    const storedMessages =
+    const storedMessages = normalizeStoredMessages(
       serializedOutput.length >= contextMessages.length
         ? serializedOutput.map(toConversationMessage)
-        : [...contextMessages, ...serializedOutput.map(toConversationMessage)];
-      const nextTitle = getTitleFromMessages(storedMessages);
-      await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
+        : [...contextMessages, ...serializedOutput.map(toConversationMessage)]
+    );
+    const nextTitle = getTitleFromMessages(storedMessages);
+    await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
   }
 
   const updatedFiles = tracker.changed

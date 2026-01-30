@@ -11,6 +11,17 @@ type ConversationResponse = {
   conversation: Conversation | null;
 };
 
+const dedupeMessagesById = (messages: ConversationMessage[]) => {
+  const seen = new Set<string>();
+  const result: ConversationMessage[] = [];
+  for (const message of [...messages].reverse()) {
+    if (message.id && seen.has(message.id)) continue;
+    if (message.id) seen.add(message.id);
+    result.push(message);
+  }
+  return result.reverse();
+};
+
 const getToken = (req: NextApiRequest): string | null => {
   const queryToken = typeof req.query.token === "string" ? req.query.token : null;
   const bodyToken = typeof req.body?.token === "string" ? req.body.token : null;
@@ -38,6 +49,12 @@ const handler = async (
     const conversation = await getConversation(token, id);
     if (!conversation) {
       res.status(404).json({ error: "对话不存在" });
+      return;
+    }
+    const deduped = dedupeMessagesById(conversation.messages);
+    if (deduped.length !== conversation.messages.length) {
+      await replaceConversationMessages(token, id, deduped, conversation.title);
+      res.status(200).json({ conversation: { ...conversation, messages: deduped } });
       return;
     }
     res.status(200).json({ conversation });
