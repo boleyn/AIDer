@@ -7,6 +7,8 @@ type ChatTitleSectionProps = {
   conversations?: ConversationSummary[];
   activeConversationId?: string | null;
   onSelectConversation?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
+  onDeleteAllConversations?: () => void;
   title?: string;
 };
 
@@ -16,6 +18,8 @@ const ChatTitleSection = ({
   conversations,
   activeConversationId,
   onSelectConversation,
+  onDeleteConversation,
+  onDeleteAllConversations,
   title,
 }: ChatTitleSectionProps) => {
   return (
@@ -25,6 +29,8 @@ const ChatTitleSection = ({
       conversations={conversations}
       activeConversationId={activeConversationId}
       onSelectConversation={onSelectConversation}
+      onDeleteConversation={onDeleteConversation}
+      onDeleteAllConversations={onDeleteAllConversations}
       title={title}
     />
   );

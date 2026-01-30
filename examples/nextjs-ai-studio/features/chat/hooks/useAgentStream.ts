@@ -201,24 +201,22 @@ export function useAgentStream({
       }
 
       historyRef.current = [...historyRef.current, ...newMessages];
-      if (activeConversation?.title === "新对话") {
-        const firstUser = newMessages.find((message) => message.type === "human");
-        const rawContent = firstUser?.content;
-        const title =
-          typeof rawContent === "string"
-            ? rawContent.trim()
-            : Array.isArray(rawContent)
-            ? rawContent
-                .map((item) =>
-                  typeof item === "string" ? item : (item as { text?: string })?.text ?? ""
-                )
-                .join("")
-                .trim()
-            : "";
-        if (title && activeConversation?.id) {
-          const trimmed = title.length > 40 ? `${title.slice(0, 40)}...` : title;
-          updateConversationTitle(activeConversation.id, trimmed);
-        }
+      const lastUser = [...newMessages].reverse().find((message) => message.type === "human");
+      const rawContent = lastUser?.content;
+      const title =
+        typeof rawContent === "string"
+          ? rawContent.trim()
+          : Array.isArray(rawContent)
+          ? rawContent
+              .map((item) =>
+                typeof item === "string" ? item : (item as { text?: string })?.text ?? ""
+              )
+              .join("")
+              .trim()
+          : "";
+      if (title && activeConversation?.id) {
+        const trimmed = title.length > 40 ? `${title.slice(0, 40)}...` : title;
+        updateConversationTitle(activeConversation.id, trimmed);
       }
       const payloadMessages = newMessages.map(toAgentMessage);
       let conversationId = activeConversation?.id;

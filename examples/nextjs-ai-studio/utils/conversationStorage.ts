@@ -149,3 +149,17 @@ export async function replaceConversationMessages(
     }
   );
 }
+
+export async function deleteConversation(token: string, id: string): Promise<boolean> {
+  const objectId = toObjectId(id);
+  if (!objectId) return false;
+  const collection = await getCollection();
+  const result = await collection.deleteOne({ _id: objectId, token });
+  return result.deletedCount > 0;
+}
+
+export async function deleteAllConversations(token: string): Promise<number> {
+  const collection = await getCollection();
+  const result = await collection.deleteMany({ token });
+  return result.deletedCount ?? 0;
+}

@@ -8,7 +8,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 
-import { AddIcon, ClockIcon, SettingsIcon } from "../../../components/common/Icon";
+import { AddIcon, ClockIcon, CloseIcon, SettingsIcon } from "../../../components/common/Icon";
 import type { ConversationSummary } from "../../../types/conversation";
 
 type ChatHeaderProps = {
@@ -16,6 +16,8 @@ type ChatHeaderProps = {
   conversations?: ConversationSummary[];
   activeConversationId?: string | null;
   onSelectConversation?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
+  onDeleteAllConversations?: () => void;
   onReset?: () => void;
   onNewConversation?: () => void;
 };
@@ -25,6 +27,8 @@ const ChatHeader = ({
   conversations = [],
   activeConversationId,
   onSelectConversation,
+  onDeleteConversation,
+  onDeleteAllConversations,
   onReset,
   onNewConversation,
 }: ChatHeaderProps) => {
@@ -62,9 +66,39 @@ const ChatHeader = ({
                     conversation.id === activeConversationId ? "600" : "400"
                   }
                 >
-                  {conversation.title || "未命名对话"}
+                  <Flex align="center" justify="space-between" w="full" gap={2}>
+                    <Text isTruncated maxW="180px">
+                      {conversation.title || "未命名对话"}
+                    </Text>
+                    <IconButton
+                      aria-label="Delete conversation"
+                      size="xs"
+                      variant="ghost"
+                      colorScheme="red"
+                      icon={<CloseIcon />}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (window.confirm("确定要删除这条对话记录吗？")) {
+                          onDeleteConversation?.(conversation.id);
+                        }
+                      }}
+                    />
+                  </Flex>
                 </MenuItem>
               ))
+            )}
+            {conversations.length > 0 && (
+              <MenuItem
+                color="red.500"
+                fontWeight="600"
+                onClick={() => {
+                  if (window.confirm("确定要清空所有历史记录吗？")) {
+                    onDeleteAllConversations?.();
+                  }
+                }}
+              >
+                清空所有历史记录
+              </MenuItem>
             )}
           </MenuList>
         </Menu>

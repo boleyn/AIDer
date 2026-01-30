@@ -23,6 +23,15 @@ export async function createConversation(
   return payload.conversation ?? null;
 }
 
+export async function deleteAllConversations(token: string): Promise<number> {
+  const response = await fetch(`/api/conversations?token=${encodeURIComponent(token)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) return 0;
+  const payload = (await response.json()) as { deletedCount?: number };
+  return payload.deletedCount ?? 0;
+}
+
 export async function getConversation(
   token: string,
   id: string
@@ -34,4 +43,12 @@ export async function getConversation(
   if (!response.ok) return null;
   const payload = (await response.json()) as { conversation?: Conversation };
   return payload.conversation ?? null;
+}
+
+export async function deleteConversation(token: string, id: string): Promise<boolean> {
+  const response = await fetch(
+    `/api/conversations/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`,
+    { method: "DELETE" }
+  );
+  return response.ok;
 }

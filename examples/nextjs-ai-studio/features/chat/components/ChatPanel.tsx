@@ -153,6 +153,8 @@ const AssistantThread = ({
   conversations,
   activeConversationId,
   onSelectConversation,
+  onDeleteConversation,
+  onDeleteAllConversations,
   title,
 }: {
   onReset: () => void;
@@ -160,6 +162,8 @@ const AssistantThread = ({
   conversations?: ConversationSummary[];
   activeConversationId?: string | null;
   onSelectConversation?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
+  onDeleteAllConversations?: () => void;
   title?: string;
 }) => (
   <ThreadPrimitive.Root className="assistant-thread">
@@ -169,6 +173,8 @@ const AssistantThread = ({
       conversations={conversations}
       activeConversationId={activeConversationId}
       onSelectConversation={onSelectConversation}
+      onDeleteConversation={onDeleteConversation}
+      onDeleteAllConversations={onDeleteAllConversations}
       title={title}
     />
     <ChatMessagesSection components={threadMessageComponents} />
@@ -187,6 +193,8 @@ type ChatPanelBodyProps = {
   onReset: () => void;
   onNewConversation: () => void;
   onSelectConversation: (id: string) => void;
+  onDeleteConversation: (id: string) => void;
+  onDeleteAllConversations: () => void;
 };
 
 const ChatPanelBody = ({
@@ -200,6 +208,8 @@ const ChatPanelBody = ({
   onReset,
   onNewConversation,
   onSelectConversation,
+  onDeleteConversation,
+  onDeleteAllConversations,
 }: ChatPanelBodyProps) => {
   const toLangChainMessage = useCallback(
     (message: ConversationMessage): LangChainMessage => {
@@ -285,6 +295,8 @@ const ChatPanelBody = ({
       onSelectConversation={onSelectConversation}
       onNewConversation={onNewConversation}
       title={activeConversation?.title}
+      onDeleteConversation={onDeleteConversation}
+      onDeleteAllConversations={onDeleteAllConversations}
     />
   );
 };
@@ -301,6 +313,8 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
     createNewConversation,
     ensureConversation,
     updateConversationTitle,
+    deleteConversation,
+    deleteAllConversations,
     setActiveConversation,
   } = useConversations(token, router);
 
@@ -354,6 +368,8 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
           onReset={createNewConversation}
           onNewConversation={createNewConversation}
           onSelectConversation={loadConversation}
+          onDeleteConversation={deleteConversation}
+          onDeleteAllConversations={deleteAllConversations}
         />
       </AssistantRuntimeProvider>
     </Flex>

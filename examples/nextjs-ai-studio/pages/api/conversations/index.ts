@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import {
   createConversation,
+  deleteAllConversations,
   listConversations,
   type Conversation,
   type ConversationMessage,
@@ -15,6 +16,10 @@ type ConversationCreateResponse = {
   conversation: Conversation;
 };
 
+type ConversationDeleteAllResponse = {
+  deletedCount: number;
+};
+
 const getToken = (req: NextApiRequest): string | null => {
   const queryToken = typeof req.query.token === "string" ? req.query.token : null;
   const bodyToken = typeof req.body?.token === "string" ? req.body.token : null;
@@ -23,7 +28,9 @@ const getToken = (req: NextApiRequest): string | null => {
 
 const handler = async (
   req: NextApiRequest,
-  res: NextApiResponse<ConversationListResponse | ConversationCreateResponse | { error: string }>
+  res: NextApiResponse<
+    ConversationListResponse | ConversationCreateResponse | ConversationDeleteAllResponse | { error: string }
+  >
 ) => {
   const token = getToken(req);
   if (!token) {
@@ -49,7 +56,14 @@ const handler = async (
     return;
   }
 
-  res.setHeader("Allow", ["GET", "POST"]);
+  if (req.method === "DELETE") {
+    res.setHeader("Cache-Control", "no-store");
+    const deletedCount = await deleteAllConversations(token);
+    res.status(200).json({ deletedCount });
+    return;
+  }
+
+  res.setHeader("Allow", ["GET", "POST", "DELETE"]);
   res.status(405).json({ error: `方法 ${req.method} 不被允许` });
 };
 

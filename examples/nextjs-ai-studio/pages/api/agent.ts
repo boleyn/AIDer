@@ -105,9 +105,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
   };
 
   const getTitleFromMessages = (messages: ConversationMessage[]): string | undefined => {
-    const firstUser = messages.find((message) => message.role === "user");
-    if (!firstUser) return undefined;
-    const text = extractText(firstUser.content).trim();
+    const lastUser = [...messages].reverse().find((message) => message.role === "user");
+    if (!lastUser) return undefined;
+    const text = extractText(lastUser.content).trim();
     if (!text) return undefined;
     return text.length > 40 ? `${text.slice(0, 40)}...` : text;
   };
@@ -180,8 +180,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
           ...contextMessages,
           { role: "assistant", content: assistantResponse } as ConversationMessage,
         ];
-        const nextTitle =
-          conversation?.title === "新对话" ? getTitleFromMessages(storedMessages) : undefined;
+        const nextTitle = getTitleFromMessages(storedMessages);
         await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
       }
 
@@ -308,7 +307,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
           ...completeMessages.map(toConversationMessage),
         ];
         const nextTitle =
-          conversation?.title === "新对话" ? getTitleFromMessages(storedMessages) : undefined;
+          getTitleFromMessages(storedMessages);
         await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
       }
     } catch (error) {
@@ -362,9 +361,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
       serializedOutput.length >= contextMessages.length
         ? serializedOutput.map(toConversationMessage)
         : [...contextMessages, ...serializedOutput.map(toConversationMessage)];
-    const nextTitle =
-      conversation?.title === "新对话" ? getTitleFromMessages(storedMessages) : undefined;
-    await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
+      const nextTitle = getTitleFromMessages(storedMessages);
+      await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
   }
 
   const updatedFiles = tracker.changed

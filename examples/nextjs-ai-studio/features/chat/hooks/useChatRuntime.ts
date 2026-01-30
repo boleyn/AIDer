@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   type AttachmentAdapter,
   type FeedbackAdapter,
@@ -33,6 +33,27 @@ type UseChatRuntimeOptions = {
     speech?: SpeechSynthesisAdapter;
     feedback?: FeedbackAdapter;
   };
+};
+
+const createId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random()}`;
+};
+
+const ensureUniqueMessageIds = (messages: LangChainMessage[]) => {
+  const seen = new Set<string>();
+  return messages.map((message) => {
+    const baseId = message.id ?? createId();
+    if (seen.has(baseId)) {
+      const nextId = createId();
+      seen.add(nextId);
+      return { ...message, id: nextId };
+    }
+    seen.add(baseId);
+    return message.id ? message : { ...message, id: baseId };
+  });
 };
 
 const getPendingToolCalls = (messages: LangChainMessage[]) => {
@@ -115,6 +136,11 @@ export function useChatRuntime({
 
   const [isRunning, setIsRunning] = useState(false);
 
+  const sanitizedMessages = useMemo(
+    () => ensureUniqueMessageIds(messages),
+    [messages],
+  );
+
   const handleSendMessage = async (
     nextMessages: LangChainMessage[],
     config: LangGraphSendMessageConfig,
@@ -129,7 +155,7 @@ export function useChatRuntime({
 
   const threadMessages = useExternalMessageConverter({
     callback: convertLangChainMessages,
-    messages,
+    messages: sanitizedMessages,
     isRunning,
   });
 

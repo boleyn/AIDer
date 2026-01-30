@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { NextRouter } from "next/router";
 import type { Conversation, ConversationSummary } from "../../../types/conversation";
-import { createConversation, getConversation, listConversations } from "../services/conversations";
+import {
+  createConversation,
+  deleteConversation as deleteConversationRequest,
+  deleteAllConversations as deleteAllConversationsRequest,
+  getConversation,
+  listConversations,
+} from "../services/conversations";
 import { INITIAL_ASSISTANT_MESSAGE } from "../utils/constants";
 
 const createId = () => {
@@ -27,6 +33,8 @@ export type UseConversationsResult = {
   createNewConversation: () => Promise<Conversation | null>;
   ensureConversation: () => Promise<Conversation | null>;
   updateConversationTitle: (id: string, title: string) => void;
+  deleteConversation: (id: string) => Promise<void>;
+  deleteAllConversations: () => Promise<void>;
   setActiveConversation: (conversation: Conversation | null) => void;
 };
 
@@ -145,6 +153,39 @@ export function useConversations(token: string, router: NextRouter): UseConversa
     );
   }, []);
 
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      if (!token) return;
+      const ok = await deleteConversationRequest(token, id);
+      if (!ok) return;
+      let nextConversationId: string | null = null;
+      setConversations((prev) => {
+        const filtered = prev.filter((item) => item.id !== id);
+        nextConversationId = filtered[0]?.id ?? null;
+        return filtered;
+      });
+      if (activeConversationIdRef.current === id) {
+        activeConversationIdRef.current = null;
+        setActiveConversation(null);
+        if (nextConversationId) {
+          await loadConversation(nextConversationId);
+        } else {
+          await createNewConversation();
+        }
+      }
+    },
+    [createNewConversation, loadConversation, token]
+  );
+
+  const deleteAllConversations = useCallback(async () => {
+    if (!token) return;
+    await deleteAllConversationsRequest(token);
+    setConversations([]);
+    activeConversationIdRef.current = null;
+    setActiveConversation(null);
+    await createNewConversation();
+  }, [createNewConversation, token]);
+
   useEffect(() => {
     if (!token || !router.isReady) return;
     const initKey = `${token}:${queryConversationId ?? ""}`;
@@ -183,6 +224,8 @@ export function useConversations(token: string, router: NextRouter): UseConversa
     createNewConversation,
     ensureConversation,
     updateConversationTitle,
+    deleteConversation,
+    deleteAllConversations,
     setActiveConversation,
   };
 }

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import {
+  deleteConversation,
   getConversation,
   replaceConversationMessages,
   type Conversation,
@@ -7,7 +8,7 @@ import {
 } from "../../../utils/conversationStorage";
 
 type ConversationResponse = {
-  conversation: Conversation;
+  conversation: Conversation | null;
 };
 
 const getToken = (req: NextApiRequest): string | null => {
@@ -59,7 +60,18 @@ const handler = async (
     return;
   }
 
-  res.setHeader("Allow", ["GET", "PATCH"]);
+  if (req.method === "DELETE") {
+    res.setHeader("Cache-Control", "no-store");
+    const deleted = await deleteConversation(token, id);
+    if (!deleted) {
+      res.status(404).json({ error: "对话不存在" });
+      return;
+    }
+    res.status(200).json({ conversation: null as unknown as Conversation });
+    return;
+  }
+
+  res.setHeader("Allow", ["GET", "PATCH", "DELETE"]);
   res.status(405).json({ error: `方法 ${req.method} 不被允许` });
 };
 
