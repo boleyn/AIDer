@@ -6,6 +6,7 @@ import type { Conversation } from "../../../types/conversation";
 type AgentMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: unknown;
+  id?: string;
   name?: string;
   tool_call_id?: string;
 };
@@ -29,15 +30,16 @@ const createId = () => {
 const toAgentMessage = (message: LangChainMessage): AgentMessage => {
   switch (message.type) {
     case "human":
-      return { role: "user", content: message.content };
+      return { role: "user", content: message.content, id: message.id };
     case "ai":
-      return { role: "assistant", content: message.content };
+      return { role: "assistant", content: message.content, id: message.id };
     case "system":
-      return { role: "system", content: message.content };
+      return { role: "system", content: message.content, id: message.id };
     case "tool":
       return {
         role: "tool",
         content: message.content,
+        id: message.id,
         name: message.name,
         tool_call_id: message.tool_call_id,
       };

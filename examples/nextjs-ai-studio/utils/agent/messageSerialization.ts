@@ -46,6 +46,7 @@ export function toBaseMessage(message: IncomingMessage): BaseMessage {
   if (message.role === "assistant") {
     return new AIMessage({
       content,
+      ...(message.id ? { id: message.id } : {}),
       additional_kwargs: message.additional_kwargs,
       tool_calls: message.tool_calls,
     });
@@ -53,15 +54,22 @@ export function toBaseMessage(message: IncomingMessage): BaseMessage {
   if (message.role === "system") {
     const systemContent =
       typeof content === "string" ? content : JSON.stringify(content);
-    return new SystemMessage(systemContent);
+    return new SystemMessage({
+      content: systemContent,
+      ...(message.id ? { id: message.id } : {}),
+    });
   }
   if (message.role === "tool") {
     return new ToolMessage({
       tool_call_id: message.tool_call_id ?? message.name ?? "tool",
       content,
+      ...(message.id ? { id: message.id } : {}),
     });
   }
-  return new HumanMessage({ content });
+  return new HumanMessage({
+    content,
+    ...(message.id ? { id: message.id } : {}),
+  });
 }
 
 export function extractText(content: unknown): string {

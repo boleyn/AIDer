@@ -4,6 +4,13 @@ import type { Conversation, ConversationSummary } from "../../../types/conversat
 import { createConversation, getConversation, listConversations } from "../services/conversations";
 import { INITIAL_ASSISTANT_MESSAGE } from "../utils/constants";
 
+const createId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random()}`;
+};
+
 const CONVERSATION_LIST_CACHE_MS = 1000;
 const conversationListCache = new Map<
   string,
@@ -105,7 +112,7 @@ export function useConversations(token: string, router: NextRouter): UseConversa
     if (!token) return null;
     setIsLoadingConversation(true);
     const conversation = await createConversation(token, [
-      { role: "assistant", content: INITIAL_ASSISTANT_MESSAGE },
+      { role: "assistant", content: INITIAL_ASSISTANT_MESSAGE, id: createId() },
     ]);
     setIsLoadingConversation(false);
     if (conversation) {
