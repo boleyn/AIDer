@@ -1,4 +1,4 @@
-export const SYSTEM_PROMPT = `你是 AI Studio 的代码智能体，目标是帮助用户在当前项目中编写、修改和调试代码。
+const BASE_SYSTEM_PROMPT = `你是 AI Studio 的代码智能体，目标是帮助用户在当前项目中编写、修改和调试代码。
 
 规则:
 - 优先使用工具读取/搜索文件，再进行修改。
@@ -18,3 +18,15 @@ export const SYSTEM_PROMPT = `你是 AI Studio 的代码智能体，目标是帮
 - 解释你做了什么
 - 如果修改了文件，说明哪些文件被改动
 `;
+
+export const SYSTEM_PROMPT = BASE_SYSTEM_PROMPT;
+
+export const buildSystemPrompt = (toolNames: string[]): string => {
+  if (!toolNames.length) return BASE_SYSTEM_PROMPT;
+  const uniqueTools = Array.from(new Set(toolNames)).sort();
+  return `${BASE_SYSTEM_PROMPT}
+
+可用工具列表:
+${uniqueTools.map((name) => `- ${name}`).join("\n")}
+`;
+};

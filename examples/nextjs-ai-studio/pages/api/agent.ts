@@ -3,7 +3,7 @@ import { isAIMessage, isToolMessage, trimMessages } from "@langchain/core/messag
 import { createAgent, createMiddleware, summarizationMiddleware } from "langchain";
 import { getAgentRuntimeConfig } from "../../utils/agentConfig";
 
-import { SYSTEM_PROMPT } from "../../utils/agentPrompt";
+import { buildSystemPrompt } from "../../utils/agentPrompt";
 import { parseGlobalCommand, runGlobalAction, type ChangeTracker } from "../../utils/agentTools";
 import { formatGlobalResult } from "../../utils/agent/globalResultFormatter";
 import { getCachedModel } from "../../utils/agent/modelCache";
@@ -291,10 +291,11 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     keep: { messages: 20 },
   });
 
+  const toolNames = allTools.map((tool) => tool.name).filter((name): name is string => !!name);
   const agent = createAgent({
     model,
     tools: allTools,
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: buildSystemPrompt(toolNames),
     middleware: [summarization, trimMessageHistory],
   });
 
