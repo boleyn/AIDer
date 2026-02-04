@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import { useSandpack } from "@codesandbox/sandpack-react";
+import { withAuthHeaders } from "../utils/auth/client";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -63,6 +64,7 @@ const CodeChangeListener = forwardRef<CodeChangeListenerHandle, CodeChangeListen
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          ...withAuthHeaders(),
         },
         body: JSON.stringify({
           files: sandpack.files,

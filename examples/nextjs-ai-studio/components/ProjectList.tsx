@@ -12,6 +12,7 @@ import {
   Spinner,
   useToast,
 } from "@chakra-ui/react";
+import { withAuthHeaders } from "../utils/auth/client";
 
 type ProjectListItem = {
   token: string;
@@ -29,7 +30,9 @@ const ProjectList = () => {
   const loadProjects = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/projects");
+      const response = await fetch("/api/projects", {
+        headers: withAuthHeaders(),
+      });
       if (!response.ok) {
         throw new Error("获取项目列表失败");
       }
@@ -59,6 +62,7 @@ const ProjectList = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...withAuthHeaders(),
         },
       });
 

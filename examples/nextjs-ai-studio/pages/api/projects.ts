@@ -7,6 +7,7 @@ import {
   generateToken,
   type ProjectData,
 } from "../../utils/projectStorage";
+import { requireAuth } from "../../utils/auth/session";
 
 type ProjectListItem = {
   token: string;
@@ -122,6 +123,9 @@ h2 {
 };
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+
   if (req.method === "GET") {
     // 获取所有项目列表
     try {

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { extractText } from "../../../utils/agent/messageSerialization";
 import type { IncomingMessage } from "../../../utils/agent/messageSerialization";
+import { getAuthTokenFromRequest, requireAuth } from "../../../utils/auth/session";
 
 const getToken = (req: NextApiRequest): string | null => {
   const headerToken =
@@ -65,6 +66,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+  const authToken = getAuthTokenFromRequest(req);
+
   const token = getToken(req);
   if (!token) {
     res.status(400).json({ error: "缺少 token 参数" });
@@ -89,7 +94,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!stream) {
     const agentResponse = await fetch(buildAgentUrl(req, false), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
       body: JSON.stringify({
         token,
         messages: incomingMessages,
@@ -132,7 +140,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const agentResponse = await fetch(buildAgentUrl(req, true), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
     body: JSON.stringify({
       token,
       messages: incomingMessages,

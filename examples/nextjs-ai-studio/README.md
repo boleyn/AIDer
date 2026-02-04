@@ -51,3 +51,27 @@ yarn dev
 ```
 
 你可以把 API Route 替换成真实的后端逻辑（数据库 / Git / 对象存储）。
+
+## 登录鉴权与飞书快捷登录
+
+本示例已加入账号登录/注册与飞书快捷登录：
+
+- 账号登录/注册：`/login`
+- 飞书登录回调：`/auth/feishu/callback`
+- 服务端鉴权：所有 `api/*` 已要求登录（携带 `Authorization: Bearer <token>` 或 `auth_token` Cookie）
+
+需要配置以下环境变量：
+
+```
+MONGODB_URI=your_mongodb_uri
+JWT_SECRET=your_jwt_secret
+
+# 飞书 OAuth
+NEXT_PUBLIC_FEISHU_APP_ID=your_feishu_app_id
+NEXT_PUBLIC_FEISHU_REDIRECT_URI=http://localhost:3000/auth/feishu/callback
+FEISHU_APP_SECRET=your_feishu_app_secret
+FEISHU_DEFAULT_PASSWORD=Feishu@123456
+```
+
+说明：
+- 飞书登录若发现账号不存在，会自动注册并写入默认密码（`FEISHU_DEFAULT_PASSWORD`）。

@@ -6,6 +6,7 @@ import {
   type Conversation,
   type ConversationMessage,
 } from "../../../utils/conversationStorage";
+import { requireAuth } from "../../../utils/auth/session";
 
 type ConversationResponse = {
   conversation: Conversation | null;
@@ -32,6 +33,9 @@ const handler = async (
   req: NextApiRequest,
   res: NextApiResponse<ConversationResponse | { error: string }>
 ) => {
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+
   const token = getToken(req);
   if (!token) {
     res.status(400).json({ error: "缺少 token 参数" });

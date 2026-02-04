@@ -1,8 +1,10 @@
 import type { Conversation, ConversationMessage, ConversationSummary } from "../../../types/conversation";
+import { withAuthHeaders } from "../../../utils/auth/client";
 
 export async function listConversations(token: string): Promise<ConversationSummary[]> {
   const response = await fetch(`/api/conversations?token=${encodeURIComponent(token)}`, {
     cache: "no-store",
+    headers: withAuthHeaders(),
   });
   if (!response.ok) return [];
   const payload = (await response.json()) as { conversations?: ConversationSummary[] };
@@ -15,7 +17,7 @@ export async function createConversation(
 ): Promise<Conversation | null> {
   const response = await fetch(`/api/conversations?token=${encodeURIComponent(token)}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...withAuthHeaders() },
     body: JSON.stringify({ token, messages }),
   });
   if (!response.ok) return null;
@@ -26,6 +28,7 @@ export async function createConversation(
 export async function deleteAllConversations(token: string): Promise<number> {
   const response = await fetch(`/api/conversations?token=${encodeURIComponent(token)}`, {
     method: "DELETE",
+    headers: withAuthHeaders(),
   });
   if (!response.ok) return 0;
   const payload = (await response.json()) as { deletedCount?: number };
@@ -38,7 +41,7 @@ export async function getConversation(
 ): Promise<Conversation | null> {
   const response = await fetch(
     `/api/conversations/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`,
-    { cache: "no-store" }
+    { cache: "no-store", headers: withAuthHeaders() }
   );
   if (!response.ok) return null;
   const payload = (await response.json()) as { conversation?: Conversation };
@@ -48,7 +51,7 @@ export async function getConversation(
 export async function deleteConversation(token: string, id: string): Promise<boolean> {
   const response = await fetch(
     `/api/conversations/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`,
-    { method: "DELETE" }
+    { method: "DELETE", headers: withAuthHeaders() }
   );
   return response.ok;
 }

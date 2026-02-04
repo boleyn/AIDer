@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { githubLight } from "@codesandbox/sandpack-themes";
 
 import TopBar from "./TopBar";
+import { withAuthHeaders } from "../utils/auth/client";
 const ChatPanel = dynamic(() => import("../features/chat/components/ChatPanel"), {
   ssr: false,
 });
@@ -124,9 +125,9 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
     setError("");
 
     try {
-      const response = await fetch(
-        `/api/code?token=${encodeURIComponent(requestedToken)}`
-      );
+      const response = await fetch(`/api/code?token=${encodeURIComponent(requestedToken)}`, {
+        headers: withAuthHeaders(),
+      });
       if (!response.ok) {
         throw new Error(`服务返回 ${response.status}`);
       }
@@ -199,6 +200,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
+          ...withAuthHeaders(),
         },
         body: JSON.stringify({
           files: currentFiles,
@@ -262,6 +264,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          ...withAuthHeaders(),
         },
         body: JSON.stringify({
           name: newName.trim(),

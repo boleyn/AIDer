@@ -6,6 +6,7 @@ import {
   updateFile,
   updateFiles,
 } from "../../utils/projectStorage";
+import { requireAuth } from "../../utils/auth/session";
 
 type PatchProjectRequest = {
   name?: string;
@@ -26,6 +27,9 @@ type UpdateFilesRequest = {
 };
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+
   const token = typeof req.query.token === "string" ? req.query.token : "";
 
   if (!token) {

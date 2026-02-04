@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { MutableRefObject } from "react";
 import type { LangChainMessage, LangGraphMessagesEvent, LangGraphStreamCallback } from "@assistant-ui/react-langgraph";
 import type { Conversation } from "../../../types/conversation";
+import { withAuthHeaders } from "../../../utils/auth/client";
 
 type AgentMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -233,7 +234,7 @@ export function useAgentStream({
       try {
         response = await fetch(`/api/agent?token=${encodeURIComponent(token)}&stream=1`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...withAuthHeaders() },
           body: JSON.stringify({
             token,
             messages: payloadMessages,

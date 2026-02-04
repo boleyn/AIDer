@@ -24,6 +24,7 @@ import {
   replaceConversationMessages,
   type ConversationMessage,
 } from "../../utils/conversationStorage";
+import { requireAuth } from "../../utils/auth/session";
 
 type AgentResponse = {
   message: string;
@@ -38,6 +39,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse<AgentResponse>)
     res.status(405).json({ message: "", error: `方法 ${req.method} 不被允许` });
     return;
   }
+
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
 
   const token = typeof req.query.token === "string" ? req.query.token : (req.body?.token as string);
   if (!token) {

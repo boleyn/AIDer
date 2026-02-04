@@ -3,6 +3,7 @@ import type { SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
 
 import StudioShell, { type SandpackFiles } from "../../components/StudioShell";
 import { getProject } from "../../utils/projectStorage";
+import { getAuthUserFromRequest } from "../../utils/auth/ssr";
 
 type RunPageProps = {
   token: string;
@@ -30,6 +31,16 @@ const RunPage = ({ token, initialProject }: RunPageProps) => {
 };
 
 export const getServerSideProps: GetServerSideProps<RunPageProps> = async (context) => {
+  const authUser = getAuthUserFromRequest(context.req);
+  if (!authUser) {
+    return {
+      redirect: {
+        destination: `/login?lastRoute=${encodeURIComponent(context.resolvedUrl)}`,
+        permanent: false,
+      },
+    };
+  }
+
   const token = typeof context.params?.token === "string" ? context.params.token : "";
 
   if (!token) {

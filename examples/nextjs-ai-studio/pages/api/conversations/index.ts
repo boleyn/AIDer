@@ -7,6 +7,7 @@ import {
   type ConversationMessage,
   type ConversationSummary,
 } from "../../../utils/conversationStorage";
+import { requireAuth } from "../../../utils/auth/session";
 
 type ConversationListResponse = {
   conversations: ConversationSummary[];
@@ -32,6 +33,9 @@ const handler = async (
     ConversationListResponse | ConversationCreateResponse | ConversationDeleteAllResponse | { error: string }
   >
 ) => {
+  const auth = await requireAuth(req, res);
+  if (!auth) return;
+
   const token = getToken(req);
   if (!token) {
     res.status(400).json({ error: "缺少 token 参数" });
