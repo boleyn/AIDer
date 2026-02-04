@@ -10,6 +10,7 @@ export type AgentRuntimeConfig = {
 };
 
 const DEFAULT_MODEL = "gemini-3-flash-preview";
+const DEFAULT_RECURSION_LIMIT = 100;
 
 export const getAgentRuntimeConfig = (): AgentRuntimeConfig => {
   const provider =
@@ -21,13 +22,17 @@ export const getAgentRuntimeConfig = (): AgentRuntimeConfig => {
     (provider === "google" ? process.env.GOOGLE_MODEL : process.env.OPENAI_MODEL) ||
     DEFAULT_MODEL;
 
+  const parsedRecursionLimit = process.env.AI_RECURSION_LIMIT
+    ? Number.parseInt(process.env.AI_RECURSION_LIMIT, 100)
+    : undefined;
+
   return {
     provider,
     modelName,
     temperature: Number.parseFloat(process.env.AI_TEMPERATURE || "0.2"),
-    recursionLimit: process.env.AI_RECURSION_LIMIT
-      ? Number.parseInt(process.env.AI_RECURSION_LIMIT, 50)
-      : undefined,
+    recursionLimit: Number.isFinite(parsedRecursionLimit)
+      ? parsedRecursionLimit
+      : DEFAULT_RECURSION_LIMIT,
     openaiKey: process.env.OPENAI_API_KEY,
     openaiBaseUrl: process.env.OPENAI_BASE_URL,
     googleKey: process.env.GOOGLE_API_KEY,
