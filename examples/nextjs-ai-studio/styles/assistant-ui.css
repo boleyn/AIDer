@@ -74,8 +74,72 @@
 .assistant-composer {
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: stretch;
+  flex-direction: column;
   padding: 8px 0 4px;
+}
+
+.assistant-composer-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.assistant-composer-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.assistant-attach {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.assistant-attach:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.assistant-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.assistant-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 4px 8px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+}
+
+.assistant-attachment-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-attachment-remove {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .assistant-input {
@@ -83,6 +147,7 @@
   resize: none;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
+  min-height: 44px;
   padding: 10px 12px;
   font-size: 14px;
   line-height: 1.5;
@@ -102,10 +167,11 @@
 
 .assistant-send {
   border: none;
-  border-radius: 999px;
+  border-radius: 12px;
   background: #111827;
   color: #ffffff;
-  padding: 8px 14px;
+  min-height: 44px;
+  padding: 0 16px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;

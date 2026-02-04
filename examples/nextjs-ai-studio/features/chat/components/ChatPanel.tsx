@@ -24,6 +24,7 @@ import type { Conversation, ConversationMessage, ConversationSummary } from "../
 import { useConversations } from "../hooks/useConversations";
 import { useAgentStream } from "../hooks/useAgentStream";
 import { useChatRuntime } from "../hooks/useChatRuntime";
+import { attachmentAdapter } from "../utils/attachmentAdapter";
 import { INITIAL_ASSISTANT_MESSAGE } from "../utils/constants";
 
 type ChatPanelProps = {
@@ -335,6 +336,9 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
           onFilesUpdated(data as Record<string, { code: string }>);
         }
       },
+    },
+    adapters: {
+      attachments: attachmentAdapter,
     },
   });
 
