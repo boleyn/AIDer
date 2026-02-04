@@ -350,11 +350,14 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) =
       minH="0"
       overflow="hidden"
       alignSelf="stretch"
-      border="1px solid"
-      borderColor="gray.200"
-      borderRadius="xl"
-      bg="whiteAlpha.900"
-      boxShadow="sm"
+      border="1px solid rgba(255,255,255,0.7)"
+      borderTopLeftRadius="2xl"
+      borderBottomLeftRadius="2xl"
+      borderTopRightRadius={0}
+      borderBottomRightRadius={0}
+      bg="rgba(255,255,255,0.75)"
+      backdropFilter="blur(18px)"
+      boxShadow="0 18px 40px -24px rgba(15, 23, 42, 0.25)"
     >
       <AssistantRuntimeProvider runtime={runtime}>
         <ChatPanelBody

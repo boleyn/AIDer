@@ -6,6 +6,7 @@ import { githubLight } from "@codesandbox/sandpack-themes";
 
 import TopBar from "./TopBar";
 import { withAuthHeaders } from "../utils/auth/client";
+import VectorBackground from "./auth/VectorBackground";
 const ChatPanel = dynamic(() => import("../features/chat/components/ChatPanel"), {
   ssr: false,
 });
@@ -116,7 +117,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
 
   const loadProject = useCallback(async (requestedToken: string) => {
     if (!requestedToken) {
-      setError("需要一个编码 (token) 才能加载项目。你也可以用 /run/<token> 作为路径。");
+      setError("需要一个项目 ID (di) 才能加载项目。你也可以用 /project/<di> 作为路径。");
       setStatus("error");
       return;
     }
@@ -321,58 +322,65 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
   }, []);
 
   return (
-    <Flex
-      ref={containerRef}
-      direction="column"
-      h="100dvh"
-      bg="transparent"
-      p={{ base: 3, md: 4 }}
-      gap={3}
-      overflow="hidden"
-      boxSizing="border-box"
-    >
-      <Box>
-        <TopBar
-          projectName={projectName}
-          saveStatus={saveStatus}
-          onSave={handleManualSave}
-          onDownload={handleDownload}
-          onProjectNameChange={handleProjectNameChange}
-        />
-      </Box>
-
-      <SandpackProvider
-        template={template}
-        files={sandpackFiles}
-        customSetup={customSetup}
-        theme={githubLight}
-        options={{
-          autorun: true,
-        }}
+    <Box position="relative" minH="100vh" overflow="hidden">
+      <VectorBackground />
+      <Flex
+        ref={containerRef}
+        direction="column"
+        minH="100vh"
+        align="stretch"
+        justify="flex-start"
+        px={{ base: 4, md: 8, xl: 10 }}
+        py={{ base: 6, md: 8 }}
+        position="relative"
+        zIndex={1}
+        gap={{ base: 4, md: 5 }}
+        overflow="hidden"
+        boxSizing="border-box"
       >
-        <CodeChangeListener
-          token={token}
+        <Box>
+          <TopBar
+            projectName={projectName}
+            saveStatus={saveStatus}
+            onSave={handleManualSave}
+            onDownload={handleDownload}
+            onProjectNameChange={handleProjectNameChange}
+          />
+        </Box>
+
+        <SandpackProvider
           template={template}
-          dependencies={customSetup?.dependencies || {}}
-          onSaveStatusChange={setSaveStatus}
-          onFilesChange={handleFilesChange}
-        />
-        <Flex ref={mainRef} as="main" align="stretch" gap={4} flex="1" minH="0">
-          <ChatPanel
+          files={sandpackFiles}
+          customSetup={customSetup}
+          theme={githubLight}
+          options={{
+            autorun: true,
+          }}
+        >
+          <CodeChangeListener
             token={token}
-            onFilesUpdated={handleAgentFilesUpdated}
-            height={workspaceHeight}
+            template={template}
+            dependencies={customSetup?.dependencies || {}}
+            onSaveStatusChange={setSaveStatus}
+            onFilesChange={handleFilesChange}
           />
-          <WorkspaceShell
-            status={status}
-            error={error}
-            activeView={activeView}
-            onChangeView={setActiveView}
-            workspaceHeight={workspaceHeight}
-          />
-        </Flex>
-      </SandpackProvider>
-    </Flex>
+          <Flex ref={mainRef} as="main" align="stretch" gap={4} flex="1" minH="0">
+            <ChatPanel
+              token={token}
+              onFilesUpdated={handleAgentFilesUpdated}
+              height={workspaceHeight}
+            />
+            <WorkspaceShell
+              status={status}
+              error={error}
+              activeView={activeView}
+              onChangeView={setActiveView}
+              workspaceHeight={workspaceHeight}
+            />
+          </Flex>
+        </SandpackProvider>
+      </Flex>
+    </Box>
   );
 };
 

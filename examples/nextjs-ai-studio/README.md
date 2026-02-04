@@ -14,8 +14,8 @@ yarn dev
 
 访问：
 - `http://localhost:3000`
-- `http://localhost:3000/run/hello`
-- `http://localhost:3000/run/three`
+- `http://localhost:3000/project/hello`
+- `http://localhost:3000/project/three`
 
 ## AI 代码智能体
 

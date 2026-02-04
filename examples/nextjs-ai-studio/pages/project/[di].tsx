@@ -5,8 +5,8 @@ import StudioShell, { type SandpackFiles } from "../../components/StudioShell";
 import { getProject } from "../../utils/projectStorage";
 import { getAuthUserFromRequest } from "../../utils/auth/ssr";
 
-type RunPageProps = {
-  token: string;
+type ProjectPageProps = {
+  di: string;
   initialProject?: {
     token: string;
     name: string;
@@ -16,21 +16,21 @@ type RunPageProps = {
   } | null;
 };
 
-const RunPage = ({ token, initialProject }: RunPageProps) => {
-  if (!token) {
+const ProjectPage = ({ di, initialProject }: ProjectPageProps) => {
+  if (!di) {
     return null;
   }
 
   return (
     <StudioShell
-      initialToken={token}
+      initialToken={di}
       initialProject={initialProject ?? undefined}
-      key={token}
+      key={di}
     />
   );
 };
 
-export const getServerSideProps: GetServerSideProps<RunPageProps> = async (context) => {
+export const getServerSideProps: GetServerSideProps<ProjectPageProps> = async (context) => {
   const authUser = getAuthUserFromRequest(context.req);
   if (!authUser) {
     return {
@@ -41,13 +41,13 @@ export const getServerSideProps: GetServerSideProps<RunPageProps> = async (conte
     };
   }
 
-  const token = typeof context.params?.token === "string" ? context.params.token : "";
+  const di = typeof context.params?.di === "string" ? context.params.di : "";
 
-  if (!token) {
+  if (!di) {
     return { notFound: true };
   }
 
-  const project = await getProject(token);
+  const project = await getProject(di);
 
   if (!project) {
     return { notFound: true };
@@ -58,7 +58,7 @@ export const getServerSideProps: GetServerSideProps<RunPageProps> = async (conte
 
   return {
     props: {
-      token,
+      di,
       initialProject: {
         token: project.token,
         name: project.name,
@@ -70,4 +70,4 @@ export const getServerSideProps: GetServerSideProps<RunPageProps> = async (conte
   };
 };
 
-export default RunPage;
+export default ProjectPage;

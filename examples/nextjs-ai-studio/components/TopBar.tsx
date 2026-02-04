@@ -117,13 +117,13 @@ const TopBar = ({
       justify="space-between"
       gap={4}
       wrap="wrap"
-      border="1px solid"
-      borderColor="gray.200"
-      bg="whiteAlpha.900"
-      borderRadius="xl"
+      border="1px solid rgba(255,255,255,0.7)"
+      bg="rgba(255,255,255,0.75)"
+      backdropFilter="blur(18px)"
+      borderRadius="2xl"
       px={4}
       py={3}
-      boxShadow="sm"
+      boxShadow="0 18px 40px -24px rgba(15, 23, 42, 0.25)"
     >
       <Flex align="center" gap={3} flex="1" minW="0">
         <MyTooltip label="返回列表">

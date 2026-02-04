@@ -49,7 +49,7 @@ export function useProjects() {
           throw new Error(data.error || "创建项目失败");
         }
         const project = await response.json();
-        router.push(`/run/${project.token}`);
+        router.push(`/project/${project.token}`);
       } catch (error) {
         toast({
           title: "创建失败",
@@ -67,7 +67,7 @@ export function useProjects() {
 
   const openProject = useCallback(
     (token: string) => {
-      router.push(`/run/${token}`);
+      router.push(`/project/${token}`);
     },
     [router]
   );
