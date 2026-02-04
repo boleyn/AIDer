@@ -46,3 +46,12 @@ export const createUser = async (input: {
   } as UserDoc);
   return result.insertedId;
 };
+
+export const updateUserPassword = async (userId: string, passwordHash: string) => {
+  const users = await getUsersCollection();
+  const result = await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { passwordHash, updatedAt: new Date() } }
+  );
+  return result.modifiedCount > 0;
+};

@@ -1,3 +1,4 @@
+export { default as LogoIcon } from "./icons/logo.svg";
 export { default as RunIcon } from "./icons/run.svg";
 export { default as CopyIcon } from "./icons/copy.svg";
 export { default as OpenInNewIcon } from "./icons/open-in-new.svg";

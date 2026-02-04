@@ -6,6 +6,16 @@ export const theme = extendTheme({
     useSystemColorMode: false,
   },
   components: {
+    Input: {
+      baseStyle: {
+        field: {
+          _placeholder: {
+            fontSize: "sm",
+            color: "myGray.400",
+          },
+        },
+      },
+    },
     Button: {
       variants: {
         primary: {

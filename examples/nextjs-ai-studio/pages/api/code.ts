@@ -30,6 +30,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   const auth = await requireAuth(req, res);
   if (!auth) return;
 
+  const userId = String(auth.user._id);
   const token = typeof req.query.token === "string" ? req.query.token : "";
 
   if (!token) {
@@ -38,11 +39,14 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 
   if (req.method === "GET") {
-    // 读取项目详情
     try {
       const project = await getProject(token);
       if (!project) {
         res.status(404).json({ error: "项目不存在" });
+        return;
+      }
+      if (project.userId && project.userId !== userId) {
+        res.status(403).json({ error: "无权访问该项目" });
         return;
       }
 
@@ -63,11 +67,14 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 
   if (req.method === "PATCH") {
-    // 部分更新项目（只更新元数据：name, template, dependencies）
     try {
       const project = await getProject(token);
       if (!project) {
         res.status(404).json({ error: "项目不存在" });
+        return;
+      }
+      if (project.userId && project.userId !== userId) {
+        res.status(403).json({ error: "无权访问该项目" });
         return;
       }
 
@@ -108,6 +115,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
           res.status(404).json({ error: "项目不存在" });
           return;
         }
+        if (project.userId && project.userId !== userId) {
+          res.status(403).json({ error: "无权访问该项目" });
+          return;
+        }
 
         if (!body.path || typeof body.code !== "string") {
           res.status(400).json({ error: "缺少path或code参数" });
@@ -128,6 +139,10 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       const project = await getProject(token);
       if (!project) {
         res.status(404).json({ error: "项目不存在" });
+        return;
+      }
+      if (project.userId && project.userId !== userId) {
+        res.status(403).json({ error: "无权访问该项目" });
         return;
       }
 

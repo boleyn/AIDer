@@ -1,6 +1,7 @@
 import type { AppProps } from "next/app";
 import { ChakraProvider } from "@chakra-ui/react";
 import { theme } from "../styles/theme";
+import { AuthProvider } from "../contexts/AuthContext";
 
 // Import polyfill - it runs immediately on import
 import "../utils/cryptoPolyfill";
@@ -11,9 +12,11 @@ import AuthGuard from "../components/auth/AuthGuard";
 const App = ({ Component, pageProps }: AppProps) => {
   return (
     <ChakraProvider theme={theme}>
-      <AuthGuard>
-        <Component {...pageProps} />
-      </AuthGuard>
+      <AuthProvider>
+        <AuthGuard>
+          <Component {...pageProps} />
+        </AuthGuard>
+      </AuthProvider>
     </ChakraProvider>
   );
 };

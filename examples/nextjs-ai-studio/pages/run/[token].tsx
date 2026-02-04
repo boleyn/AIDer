@@ -50,12 +50,10 @@ export const getServerSideProps: GetServerSideProps<RunPageProps> = async (conte
   const project = await getProject(token);
 
   if (!project) {
-    return {
-      props: {
-        token,
-        initialProject: null,
-      },
-    };
+    return { notFound: true };
+  }
+  if (project.userId && project.userId !== authUser.sub) {
+    return { notFound: true };
   }
 
   return {

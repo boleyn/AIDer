@@ -5,8 +5,10 @@ import {
   getProject,
   saveProject,
   generateToken,
+  deleteProject as deleteProjectStorage,
   type ProjectData,
 } from "../../utils/projectStorage";
+import { deleteAllConversations } from "../../utils/conversationStorage";
 import { requireAuth } from "../../utils/auth/session";
 
 type ProjectListItem = {
@@ -126,10 +128,16 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   const auth = await requireAuth(req, res);
   if (!auth) return;
 
+  const userId = auth.user._id != null ? String(auth.user._id) : "";
+  if (!userId) {
+    res.status(401).json({ error: "用户身份无效" });
+    return;
+  }
+
   if (req.method === "GET") {
-    // 获取所有项目列表
+    res.setHeader("Cache-Control", "private, no-store, must-revalidate");
     try {
-      const projects = await listProjects();
+      const projects = await listProjects(userId);
       res.status(200).json(projects);
     } catch (error) {
       console.error("Failed to list projects:", error);
@@ -139,16 +147,21 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 
   if (req.method === "POST") {
-    // 创建新项目
     try {
       const body = req.body as CreateProjectRequest;
+      const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : null;
+      if (!name) {
+        res.status(400).json({ error: "请输入项目名称" });
+        return;
+      }
       const token = generateToken();
       const now = new Date().toISOString();
 
       const project: ProjectData = {
         token,
-        name: body.name || "未命名项目",
+        name,
         template: body.template || DEFAULT_TEMPLATE,
+        userId,
         files: body.files || DEFAULT_FILES,
         dependencies: body.dependencies || {},
         createdAt: now,
@@ -173,7 +186,33 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     return;
   }
 
-  res.setHeader("Allow", ["GET", "POST"]);
+  if (req.method === "DELETE") {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    if (!token) {
+      res.status(400).json({ error: "缺少 token 参数" });
+      return;
+    }
+    try {
+      const project = await getProject(token);
+      if (!project) {
+        res.status(404).json({ error: "项目不存在" });
+        return;
+      }
+      if (project.userId !== userId) {
+        res.status(403).json({ error: "无权删除该项目" });
+        return;
+      }
+      await deleteAllConversations(token);
+      await deleteProjectStorage(token);
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete project:", error);
+      res.status(500).json({ error: "删除项目失败" });
+    }
+    return;
+  }
+
+  res.setHeader("Allow", ["GET", "POST", "DELETE"]);
   res.status(405).json({ error: `方法 ${req.method} 不被允许` });
 };
 
