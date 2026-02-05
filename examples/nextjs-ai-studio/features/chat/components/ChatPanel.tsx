@@ -1,49 +1,40 @@
 import { Box, Button, Flex, IconButton, Input, Spinner, Text } from "@chakra-ui/react";
-import Markdown from "../../../components/Markdown/Markdown";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ChatHeader from "./ChatHeader";
+import ChatItem from "./ChatItem";
 import type { Conversation, ConversationMessage } from "../../../types/conversation";
 import { useConversations } from "../hooks/useConversations";
 import { createId, extractText } from "../../../utils/agent/messages";
+import { streamFetch, SseResponseEventEnum } from "../../../utils/streamFetch";
 
 const normalizeContent = (content: unknown) => {
   const text = extractText(content);
   return text.trim() ? text : "";
 };
 
-const MessageBubble = ({ role, content }: { role: ConversationMessage["role"]; content: string }) => {
-  const isUser = role === "user";
-  const isTool = role === "tool";
-  const bg = isUser ? "white" : isTool ? "gray.100" : "gray.50";
-  const borderColor = isUser ? "gray.200" : isTool ? "orange.200" : "gray.200";
-  const align = isUser ? "flex-end" : "flex-start";
-
-  return (
-    <Flex justify={align} w="full">
-      <Box
-        maxW="85%"
-        border="1px solid"
-        borderColor={borderColor}
-        borderRadius="lg"
-        bg={bg}
-        px={4}
-        py={3}
-        fontSize="sm"
-        color="gray.700"
-      >
-        {role === "assistant" ? <Markdown content={content || ""} /> : content || ""}
-      </Box>
-    </Flex>
-  );
+const normalizeStreamContent = (content: unknown) => {
+  const text = extractText(content);
+  return text ?? "";
 };
 
-const ToolBadge = ({ name }: { name?: string }) => (
-  <Text fontSize="xs" color="orange.600" mb={1} fontWeight="600">
-    {name ? `工具: ${name}` : "工具"}
-  </Text>
-);
+const extractDeltaText = (payload: unknown) => {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as {
+    content?: unknown;
+    delta?: { content?: string };
+    choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
+  };
+
+  if (Array.isArray(record.choices) && record.choices.length > 0) {
+    const choice = record.choices[0];
+    const text = choice?.delta?.content ?? choice?.message?.content ?? "";
+    return normalizeStreamContent(text);
+  }
+
+  return normalizeStreamContent(record.delta?.content ?? record.content ?? "");
+};
 
 const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; onFilesUpdated?: (files: Record<string, { code: string }>) => void; height?: string; }) => {
   const router = useRouter();
@@ -102,73 +93,93 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; 
       },
     ]);
 
+    const abortCtrl = new AbortController();
     try {
-      const response = await fetch(`/api/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const upsertToolMessage = (id: string, nextPartial: { toolName?: string; params?: string; response?: string }) => {
+        setMessages((prev) => {
+          const index = prev.findIndex((item) => item.id === id);
+          const existing = index >= 0 ? prev[index] : undefined;
+          let base = { toolName: nextPartial.toolName, params: "", response: "" };
+          if (existing?.content) {
+            try {
+              const parsed = JSON.parse(String(existing.content));
+              base = { ...base, ...parsed };
+            } catch {
+              // ignore
+            }
+          }
+          const merged = {
+            toolName: nextPartial.toolName ?? base.toolName,
+            params: (base.params || "") + (nextPartial.params || ""),
+            response: nextPartial.response ?? base.response,
+          };
+          const msg: ConversationMessage = {
+            role: "tool",
+            content: JSON.stringify(merged),
+            id,
+            name: merged.toolName,
+          };
+          if (index >= 0) {
+            const next = [...prev];
+            next[index] = msg;
+            return next;
+          }
+          const insertAt = prev.findIndex((item) => item.id === assistantMessageId);
+          if (insertAt === -1) return [...prev, msg];
+          const next = [...prev];
+          next.splice(insertAt, 0, msg);
+          return next;
+        });
+      };
+
+      await streamFetch({
+        url: `/api/chat/completions`,
+        data: {
           token,
           messages: [userMessage],
           stream: true,
           conversationId: conversation.id,
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error(`请求失败: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (!value) continue;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          const lines = part.split("\n");
-          let eventName = "message";
-          const dataLines: string[] = [];
-
-          for (const line of lines) {
-            if (line.startsWith("event:")) {
-              eventName = line.replace("event:", "").trim();
-            } else if (line.startsWith("data:")) {
-              dataLines.push(line.replace("data:", "").trim());
-            }
-          }
-
-          const dataLine = dataLines.join("\n");
-          if (!dataLine) continue;
-
-          let payload: unknown;
-          try {
-            payload = JSON.parse(dataLine);
-          } catch {
-            continue;
-          }
-
-          if (eventName === "message") {
-            const record = payload as { content?: unknown; delta?: { content?: string } };
-            const delta = normalizeContent(record.delta?.content ?? record.content ?? "");
-            if (!delta) continue;
+        },
+        abortCtrl,
+        onMessage: (item) => {
+          if (item.event === SseResponseEventEnum.answer) {
+            if (!item.text) return;
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMessageId
-                  ? { ...msg, content: `${normalizeContent(msg.content)}${delta}` }
+                  ? { ...msg, content: `${normalizeStreamContent(msg.content)}${item.text}` }
                   : msg
               )
             );
-            continue;
+            return;
           }
-        }
-      }
+          if (item.event === SseResponseEventEnum.toolCall) {
+            const payload = item as any;
+            if (payload.id) {
+              upsertToolMessage(payload.id, { toolName: payload.toolName, params: "", response: "" });
+            }
+            return;
+          }
+          if (item.event === SseResponseEventEnum.toolParams) {
+            const payload = item as any;
+            if (payload.id) {
+              upsertToolMessage(payload.id, { toolName: payload.toolName, params: payload.params || "" });
+            }
+            return;
+          }
+          if (item.event === SseResponseEventEnum.toolResponse) {
+            const payload = item as any;
+            if (payload.id) {
+              upsertToolMessage(payload.id, {
+                toolName: payload.toolName,
+                params: payload.params || "",
+                response: payload.response || "",
+              });
+            }
+            return;
+          }
+        },
+      });
     } catch (error) {
       setMessages((prev) =>
         prev.map((msg) =>
@@ -210,16 +221,14 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; 
             </Flex>
           ) : (
             <Flex direction="column" gap={3}>
-              {messages.map((message) => {
-                const content = normalizeContent(message.content);
-                if (!content && message.role !== "assistant") return null;
-                return (
-                  <Box key={message.id ?? `${message.role}-${Math.random()}`}>
-                    {message.role === "tool" ? <ToolBadge name={message.name} /> : null}
-                    <MessageBubble role={message.role} content={content} />
-                  </Box>
-                );
-              })}
+              {messages.map((message) => (
+                <Box key={message.id ?? `${message.role}-${Math.random()}`}>
+                  <ChatItem
+                    message={message}
+                    isStreaming={message.id === streamingMessageId}
+                  />
+                </Box>
+              ))}
             </Flex>
           )}
         </Box>

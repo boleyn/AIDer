@@ -245,6 +245,24 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
     latestFilesRef.current = nextFiles;
   }, []);
 
+  useEffect(() => {
+    const handleMove = (event: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const containerLeft = containerRef.current?.getBoundingClientRect().left || 0;
+      const next = Math.min(560, Math.max(300, event.clientX - containerLeft));
+      setChatWidth(next);
+    };
+    const handleUp = () => {
+      resizingRef.current = false;
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, []);
+
   const handleAgentFilesUpdated = useCallback((updated: Record<string, { code: string }>) => {
     const merged = {
       ...(latestFilesRef.current || files || {}),
@@ -290,6 +308,8 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const [workspaceHeight, setWorkspaceHeight] = useState("100%");
+  const [chatWidth, setChatWidth] = useState(420);
+  const resizingRef = useRef(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -364,11 +384,28 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
             onSaveStatusChange={setSaveStatus}
             onFilesChange={handleFilesChange}
           />
-          <Flex ref={mainRef} as="main" align="stretch" gap={4} flex="1" minH="0">
-            <ChatPanel
-              token={token}
-              onFilesUpdated={handleAgentFilesUpdated}
-              height={workspaceHeight}
+          <Flex ref={mainRef} as="main" align="stretch" gap={0} flex="1" minH="0">
+            <Box
+              flex="0 0 auto"
+              minW="300px"
+              maxW="560px"
+              w={`${chatWidth}px`}
+              alignSelf="stretch"
+            >
+              <ChatPanel
+                token={token}
+                onFilesUpdated={handleAgentFilesUpdated}
+                height={workspaceHeight}
+              />
+            </Box>
+            <Box
+              w="6px"
+              cursor="col-resize"
+              bg="transparent"
+              _hover={{ bg: "rgba(148, 163, 184, 0.4)" }}
+              onMouseDown={() => {
+                resizingRef.current = true;
+              }}
             />
             <WorkspaceShell
               status={status}

@@ -32,6 +32,19 @@ const sendSse = (res: NextApiResponse, data: string) => {
   res.write(`data: ${data}\n\n`);
 };
 
+const sendSseEvent = (res: NextApiResponse, event: string, data: string) => {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${data}\n\n`);
+};
+
+const SseResponseEventEnum = {
+  answer: "answer",
+  toolCall: "toolCall",
+  toolParams: "toolParams",
+  toolResponse: "toolResponse",
+  error: "error",
+} as const;
+
 const startSse = (res: NextApiResponse) => {
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -317,6 +330,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       tool_calls: message.tool_calls as any,
     }));
 
+  if (stream) {
+    startSse(res);
+  }
+
+  const created = Math.floor(Date.now() / 1000);
+
   const runResult = await runAgentCall({
     maxRunAgentTimes: runtimeConfig.recursionLimit || 6,
     body: {
@@ -325,7 +344,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       max_tokens: undefined,
       tools,
       temperature: runtimeConfig.temperature,
-      stream: false,
+      stream,
       toolCallMode: "toolChoice",
     } as any,
     handleInteractiveTool: async () => ({
@@ -334,6 +353,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       usages: [],
       stop: true,
     }),
+    onStreaming: stream
+      ? ({ text }) => {
+          if (!text) return;
+          sendSseEvent(
+            res,
+            SseResponseEventEnum.answer,
+            JSON.stringify({
+              id: `chatcmpl-${Date.now()}`,
+              object: "chat.completion.chunk",
+              created,
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: text },
+                  finish_reason: null,
+                },
+              ],
+            })
+          );
+        }
+      : undefined,
+    onToolCall: stream
+      ? ({ call }) => {
+          sendSseEvent(
+            res,
+            SseResponseEventEnum.toolCall,
+            JSON.stringify({
+              id: call.id,
+              toolName: call.function?.name,
+            })
+          );
+        }
+      : undefined,
+    onToolParam: stream
+      ? ({ tool, params }) => {
+          sendSseEvent(
+            res,
+            SseResponseEventEnum.toolParams,
+            JSON.stringify({
+              id: tool.id,
+              toolName: tool.function?.name,
+              params,
+            })
+          );
+        }
+      : undefined,
     handleToolResponse: async ({ call }) => {
       const tool = allTools.find((item) => item.name === call.function.name);
       let response = "";
@@ -363,6 +429,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         response,
       };
       const toolContent = JSON.stringify(toolPayload);
+      if (stream) {
+        sendSseEvent(
+          res,
+          SseResponseEventEnum.toolResponse,
+          JSON.stringify({
+            id: call.id,
+            toolName: call.function.name,
+            params: formatArgs(),
+            response,
+          })
+        );
+      }
+
       return {
         response: toolContent,
         assistantMessages: [
@@ -408,30 +487,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  startSse(res);
-  const created = Math.floor(Date.now() / 1000);
-  const chunks = finalMessage.match(/.{1,80}/g) || [];
-  for (const chunk of chunks) {
-    sendSse(
-      res,
-      JSON.stringify({
-        id: `chatcmpl-${Date.now()}`,
-        object: "chat.completion.chunk",
-        created,
-        model,
-        choices: [
-          {
-            index: 0,
-            delta: { content: chunk },
-            finish_reason: null,
-          },
-        ],
-      })
-    );
-  }
-
-  sendSse(
+  sendSseEvent(
     res,
+    SseResponseEventEnum.answer,
     JSON.stringify({
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion.chunk",
@@ -446,6 +504,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ],
     })
   );
-  sendSse(res, "[DONE]");
+  sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
   res.end();
 }
