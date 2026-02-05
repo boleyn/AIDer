@@ -1,0 +1,25 @@
+export const rewriteAichatImports = (content: string) => {
+  return content
+    .replaceAll("@fastgpt/global/core/ai/type.d", "../compat/global/core/ai/type.d")
+    .replaceAll("@fastgpt/global/core/ai/type", "../compat/global/core/ai/type")
+    .replaceAll("@fastgpt/global/core/ai/constants", "../compat/global/core/ai/constants")
+    .replaceAll("@fastgpt/global/core/ai/model.d", "../compat/global/core/ai/model.d")
+    .replaceAll("@fastgpt/global/core/ai/llm/utils", "../compat/global/core/ai/llm/utils")
+    .replaceAll("@fastgpt/global/support/wallet/bill/type", "../compat/global/support/wallet/bill/type")
+    .replaceAll("@fastgpt/global/support/user/team/type", "../compat/global/support/user/team/type")
+    .replaceAll("@fastgpt/global/common/string/tools", "../compat/global/common/string/tools")
+    .replaceAll("@fastgpt/global/common/error/utils", "../compat/global/common/error/utils")
+    .replaceAll("../../../../web/i18n/utils", "../compat/web/i18n/utils")
+    .replaceAll("../../../../../web/i18n/utils", "../compat/web/i18n/utils")
+    .replaceAll("../../../common/string/tiktoken/index", "../compat/common/string/tiktoken/index")
+    .replaceAll("../../common/string/tiktoken", "../compat/common/string/tiktoken/index")
+    .replaceAll("../../../common/system/log", "../compat/common/system/log")
+    .replaceAll("../../../common/api/axios", "../compat/common/api/axios")
+    .replaceAll("../../../common/file/image/utils", "../compat/common/file/image/utils")
+    .replaceAll("../../../common/s3/sources/chat", "../compat/common/s3/sources/chat")
+    .replaceAll("../../../common/system/utils", "../compat/common/system/utils")
+    .replaceAll("@fastgpt/global/core/workflow/template/system/interactive/type", "../compat/global/core/workflow/template/system/interactive/type")
+    .replaceAll("../config", "../../aichat/config")
+    .replaceAll("../../model", "../../aichat/model")
+    .replaceAll("../model", "../../aichat/model");
+};

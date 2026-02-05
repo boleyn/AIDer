@@ -1,384 +1,256 @@
-import { Box, Flex, Text } from "@chakra-ui/react";
+import { Box, Button, Flex, IconButton, Input, Spinner, Text } from "@chakra-ui/react";
+import Markdown from "../../../components/Markdown/Markdown";
 import { useRouter } from "next/router";
-import {
-  type MutableRefObject,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
-import {
-  AssistantRuntimeProvider,
-  MessagePrimitive,
-  ThreadPrimitive,
-  type TextMessagePartComponent,
-} from "@assistant-ui/react";
-import { type LangChainMessage } from "@assistant-ui/react-langgraph";
-import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import ChatComposerBar from "./ChatComposerBar";
-import ChatMessagesSection from "./ChatMessagesSection";
-import ChatTitleSection from "./ChatTitleSection";
-import { ToolCallCard } from "./ToolCallCard";
-import type { Conversation, ConversationMessage, ConversationSummary } from "../../../types/conversation";
+import ChatHeader from "./ChatHeader";
+import type { Conversation, ConversationMessage } from "../../../types/conversation";
 import { useConversations } from "../hooks/useConversations";
-import { useAgentStream } from "../hooks/useAgentStream";
-import { useChatRuntime } from "../hooks/useChatRuntime";
-import { attachmentAdapter } from "../utils/attachmentAdapter";
-import { INITIAL_ASSISTANT_MESSAGE } from "../utils/constants";
+import { createId, extractText } from "../../../utils/agent/messages";
 
-type ChatPanelProps = {
-  token: string;
-  onFilesUpdated?: (files: Record<string, { code: string }>) => void;
-  height?: string;
+const normalizeContent = (content: unknown) => {
+  const text = extractText(content);
+  return text.trim() ? text : "";
 };
 
-const createId = () => {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random()}`;
-};
-
-const roleStyles = {
-  user: {
-    bg: "white",
-    borderColor: "gray.200",
-  },
-  assistant: {
-    bg: "gray.50",
-    borderColor: "gray.200",
-  },
-  system: {
-    bg: "blue.50",
-    borderColor: "blue.100",
-  },
-} as const;
-
-const MarkdownText: TextMessagePartComponent = () => (
-  <MarkdownTextPrimitive className="assistant-markdown" />
-);
-
-const ToolGroup = ({ children }: { children: ReactNode }) => (
-  <Box className="assistant-tool-group">{children}</Box>
-);
-
-const messagePartsComponents = {
-  Text: MarkdownText,
-  tools: {
-    Override: ToolCallCard,
-  },
-  ToolGroup,
-} as const;
-
-const normalizeStoredContent = (content: unknown): unknown => {
-  if (typeof content === "string" || Array.isArray(content)) return content;
-  if (content && typeof content === "object" && "text" in content) {
-    const text = (content as { text?: unknown }).text;
-    if (typeof text === "string") return text;
-    if (text != null) return String(text);
-  }
-  if (content == null) return "";
-  return String(content);
-};
-
-const MessageBubble = ({ role, children }: { role: "user" | "assistant" | "system"; children: ReactNode }) => {
-  const styles = roleStyles[role];
+const MessageBubble = ({ role, content }: { role: ConversationMessage["role"]; content: string }) => {
+  const isUser = role === "user";
+  const isTool = role === "tool";
+  const bg = isUser ? "white" : isTool ? "gray.100" : "gray.50";
+  const borderColor = isUser ? "gray.200" : isTool ? "orange.200" : "gray.200";
+  const align = isUser ? "flex-end" : "flex-start";
 
   return (
-    <Box
-      border="1px solid"
-      borderColor={styles.borderColor}
-      borderRadius="lg"
-      bg={styles.bg}
-      p={3}
-      fontSize="sm"
-      color="gray.700"
-      lineHeight="1.6"
-    >
-      {children}
-    </Box>
+    <Flex justify={align} w="full">
+      <Box
+        maxW="85%"
+        border="1px solid"
+        borderColor={borderColor}
+        borderRadius="lg"
+        bg={bg}
+        px={4}
+        py={3}
+        fontSize="sm"
+        color="gray.700"
+      >
+        {role === "assistant" ? <Markdown content={content || ""} /> : content || ""}
+      </Box>
+    </Flex>
   );
 };
 
-const UserMessage = () => (
-  <MessagePrimitive.Root className="assistant-message">
-    <Flex justify="flex-end">
-      <Box className="assistant-bubble">
-        <MessageBubble role="user">
-          <MessagePrimitive.Parts components={messagePartsComponents} />
-        </MessageBubble>
-      </Box>
-    </Flex>
-  </MessagePrimitive.Root>
+const ToolBadge = ({ name }: { name?: string }) => (
+  <Text fontSize="xs" color="orange.600" mb={1} fontWeight="600">
+    {name ? `工具: ${name}` : "工具"}
+  </Text>
 );
 
-const AssistantMessage = () => (
-  <MessagePrimitive.Root className="assistant-message">
-    <Flex justify="flex-start">
-      <Box className="assistant-bubble">
-        <MessageBubble role="assistant">
-          <MessagePrimitive.Parts components={messagePartsComponents} />
-          <MessagePrimitive.Error>
-            <Text fontSize="sm" color="red.500">
-              回复失败，请重试。
-            </Text>
-          </MessagePrimitive.Error>
-        </MessageBubble>
-      </Box>
-    </Flex>
-  </MessagePrimitive.Root>
-);
-
-const SystemMessage = () => (
-  <MessagePrimitive.Root className="assistant-message">
-    <Flex justify="center">
-      <Box className="assistant-bubble">
-        <MessageBubble role="system">
-          <MessagePrimitive.Parts components={messagePartsComponents} />
-        </MessageBubble>
-      </Box>
-    </Flex>
-  </MessagePrimitive.Root>
-);
-
-const threadMessageComponents = {
-  UserMessage,
-  AssistantMessage,
-  SystemMessage,
-} as const;
-
-const AssistantThread = ({
-  onReset,
-  onNewConversation,
-  conversations,
-  activeConversationId,
-  onSelectConversation,
-  onDeleteConversation,
-  onDeleteAllConversations,
-  title,
-}: {
-  onReset: () => void;
-  onNewConversation?: () => void;
-  conversations?: ConversationSummary[];
-  activeConversationId?: string | null;
-  onSelectConversation?: (id: string) => void;
-  onDeleteConversation?: (id: string) => void;
-  onDeleteAllConversations?: () => void;
-  title?: string;
-}) => (
-  <ThreadPrimitive.Root className="assistant-thread">
-    <ChatTitleSection
-      onReset={onReset}
-      onNewConversation={onNewConversation}
-      conversations={conversations}
-      activeConversationId={activeConversationId}
-      onSelectConversation={onSelectConversation}
-      onDeleteConversation={onDeleteConversation}
-      onDeleteAllConversations={onDeleteAllConversations}
-      title={title}
-    />
-    <ChatMessagesSection components={threadMessageComponents} />
-    <ChatComposerBar />
-  </ThreadPrimitive.Root>
-);
-
-type ChatPanelBodyProps = {
-  token: string;
-  historyRef: MutableRefObject<LangChainMessage[]>;
-  conversations: ConversationSummary[];
-  activeConversation: Conversation | null;
-  isLoadingConversation: boolean;
-  isInitialized: boolean;
-  setRuntimeMessages: (messages: LangChainMessage[]) => void;
-  onReset: () => void;
-  onNewConversation: () => void;
-  onSelectConversation: (id: string) => void;
-  onDeleteConversation: (id: string) => void;
-  onDeleteAllConversations: () => void;
-};
-
-const ChatPanelBody = ({
-  token,
-  historyRef,
-  conversations,
-  activeConversation,
-  isLoadingConversation,
-  isInitialized,
-  setRuntimeMessages,
-  onReset,
-  onNewConversation,
-  onSelectConversation,
-  onDeleteConversation,
-  onDeleteAllConversations,
-}: ChatPanelBodyProps) => {
-  const toLangChainMessage = useCallback(
-    (message: ConversationMessage): LangChainMessage => {
-      const id = message.id ?? createId();
-      if (message.role === "user") {
-        return {
-          type: "human",
-          id,
-          content: normalizeStoredContent(message.content),
-        } as LangChainMessage;
-      }
-      if (message.role === "assistant") {
-        return {
-          type: "ai",
-          id,
-          content: normalizeStoredContent(message.content),
-          tool_calls: message.tool_calls,
-          tool_call_chunks: message.tool_call_chunks,
-          additional_kwargs: message.additional_kwargs,
-          status: message.status,
-        } as LangChainMessage;
-      }
-      if (message.role === "system") {
-        return {
-          type: "system",
-          id,
-          content: normalizeStoredContent(message.content),
-        } as LangChainMessage;
-      }
-      return {
-        type: "tool",
-        id,
-        content: normalizeStoredContent(message.content),
-        name: message.name,
-        tool_call_id: message.tool_call_id,
-        status: message.status,
-        artifact: message.artifact,
-      } as LangChainMessage;
-    },
-    []
-  );
-
-  const resetThreadWithMessages = useCallback(
-    (messages: ConversationMessage[]) => {
-      const langChainMessages = messages.map(toLangChainMessage);
-      const fallback = [
-        {
-          type: "ai",
-          id: createId(),
-          content: INITIAL_ASSISTANT_MESSAGE,
-        } as LangChainMessage,
-      ];
-
-      setRuntimeMessages(langChainMessages.length > 0 ? langChainMessages : fallback);
-      historyRef.current = langChainMessages.length > 0 ? langChainMessages : fallback;
-    },
-    [historyRef, setRuntimeMessages, toLangChainMessage]
-  );
-
-  useEffect(() => {
-    if (!token) return;
-    if (isLoadingConversation) return;
-    if (!isInitialized) return;
-    if (activeConversation) {
-      resetThreadWithMessages(activeConversation.messages);
-      return;
-    }
-    onReset();
-  }, [
-    activeConversation,
-    isInitialized,
-    isLoadingConversation,
-    onReset,
-    resetThreadWithMessages,
-    token,
-  ]);
-
-  return (
-    <AssistantThread
-      onReset={onReset}
-      conversations={conversations}
-      activeConversationId={activeConversation?.id ?? null}
-      onSelectConversation={onSelectConversation}
-      onNewConversation={onNewConversation}
-      title={activeConversation?.title}
-      onDeleteConversation={onDeleteConversation}
-      onDeleteAllConversations={onDeleteAllConversations}
-    />
-  );
-};
-
-const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: ChatPanelProps) => {
-  const historyRef = useRef<LangChainMessage[]>([]);
+const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; onFilesUpdated?: (files: Record<string, { code: string }>) => void; height?: string; }) => {
   const router = useRouter();
   const {
     conversations,
     activeConversation,
     isLoadingConversation,
     isInitialized,
-    loadConversation,
     createNewConversation,
     ensureConversation,
-    updateConversationTitle,
+    loadConversation,
     deleteConversation,
     deleteAllConversations,
-    setActiveConversation,
   } = useConversations(token, router);
 
-  const { stream } = useAgentStream({
-    token,
-    historyRef,
-    activeConversation,
-    ensureConversation,
-    updateConversationTitle,
-    setActiveConversation,
-  });
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const { runtime, setMessages } = useChatRuntime({
-    stream,
-    eventHandlers: {
-      onCustomEvent: (event, data) => {
-        if (event === "files" && onFilesUpdated) {
-          onFilesUpdated(data as Record<string, { code: string }>);
-        }
+  useEffect(() => {
+    setMessages(activeConversation?.messages ?? []);
+  }, [activeConversation?.id]);
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  const handleSend = useCallback(async () => {
+    const text = input.trim();
+    if (!text || isSending) return;
+
+    const conversation = await ensureConversation();
+    if (!conversation) return;
+
+    const userMessage: ConversationMessage = {
+      role: "user",
+      content: text,
+      id: createId(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsSending(true);
+
+    const assistantMessageId = createId();
+    setStreamingMessageId(assistantMessageId);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: "",
+        id: assistantMessageId,
       },
-    },
-    adapters: {
-      attachments: attachmentAdapter,
-    },
-  });
+    ]);
+
+    try {
+      const response = await fetch(`/api/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          messages: [userMessage],
+          stream: true,
+          conversationId: conversation.id,
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`请求失败: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          const lines = part.split("\n");
+          let eventName = "message";
+          const dataLines: string[] = [];
+
+          for (const line of lines) {
+            if (line.startsWith("event:")) {
+              eventName = line.replace("event:", "").trim();
+            } else if (line.startsWith("data:")) {
+              dataLines.push(line.replace("data:", "").trim());
+            }
+          }
+
+          const dataLine = dataLines.join("\n");
+          if (!dataLine) continue;
+
+          let payload: unknown;
+          try {
+            payload = JSON.parse(dataLine);
+          } catch {
+            continue;
+          }
+
+          if (eventName === "message") {
+            const record = payload as { content?: unknown; delta?: { content?: string } };
+            const delta = normalizeContent(record.delta?.content ?? record.content ?? "");
+            if (!delta) continue;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantMessageId
+                  ? { ...msg, content: `${normalizeContent(msg.content)}${delta}` }
+                  : msg
+              )
+            );
+            continue;
+          }
+        }
+      }
+    } catch (error) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? { ...msg, content: `请求失败: ${error instanceof Error ? error.message : "未知错误"}` }
+            : msg
+        )
+      );
+    } finally {
+      setStreamingMessageId(null);
+      setIsSending(false);
+    }
+  }, [ensureConversation, input, isSending, onFilesUpdated, token]);
+
+  const activeConversationTitle = useMemo(() => activeConversation?.title, [activeConversation?.title]);
 
   return (
-    <Flex
-      as="aside"
-      direction="column"
-      h={height}
-      minW="280px"
-      w="32%"
-      maxW="420px"
-      flex="0 0 auto"
-      minH="0"
-      overflow="hidden"
-      alignSelf="stretch"
-      border="1px solid rgba(255,255,255,0.7)"
-      borderTopLeftRadius="2xl"
-      borderBottomLeftRadius="2xl"
-      borderTopRightRadius={0}
-      borderBottomRightRadius={0}
-      bg="rgba(255,255,255,0.75)"
-      backdropFilter="blur(18px)"
-      boxShadow="0 18px 40px -24px rgba(15, 23, 42, 0.25)"
-    >
-      <AssistantRuntimeProvider runtime={runtime}>
-        <ChatPanelBody
-          token={token}
-          historyRef={historyRef}
-          conversations={conversations}
-          activeConversation={activeConversation}
-          isLoadingConversation={isLoadingConversation}
-          isInitialized={isInitialized}
-          setRuntimeMessages={setMessages}
-          onReset={createNewConversation}
-          onNewConversation={createNewConversation}
-          onSelectConversation={loadConversation}
-          onDeleteConversation={deleteConversation}
-          onDeleteAllConversations={deleteAllConversations}
-        />
-      </AssistantRuntimeProvider>
+    <Flex direction="column" h={height} bg="white" borderLeft="1px solid" borderColor="gray.200">
+      <ChatHeader
+        title={activeConversationTitle}
+        conversations={conversations}
+        activeConversationId={activeConversation?.id}
+        onSelectConversation={(id) => loadConversation(id)}
+        onDeleteConversation={(id) => deleteConversation(id)}
+        onDeleteAllConversations={() => deleteAllConversations()}
+        onNewConversation={() => createNewConversation()}
+      />
+
+      <Flex direction="column" flex="1" overflow="hidden">
+        <Box ref={scrollRef} flex="1" overflowY="auto" px={4} py={4} bg="gray.50">
+          {!isInitialized || isLoadingConversation ? (
+            <Flex align="center" justify="center" h="full" color="gray.500" gap={2}>
+              <Spinner size="sm" />
+              <Text fontSize="sm">加载对话...</Text>
+            </Flex>
+          ) : messages.length === 0 ? (
+            <Flex align="center" justify="center" h="full" color="gray.400">
+              <Text fontSize="sm">开始提问吧</Text>
+            </Flex>
+          ) : (
+            <Flex direction="column" gap={3}>
+              {messages.map((message) => {
+                const content = normalizeContent(message.content);
+                if (!content && message.role !== "assistant") return null;
+                return (
+                  <Box key={message.id ?? `${message.role}-${Math.random()}`}>
+                    {message.role === "tool" ? <ToolBadge name={message.name} /> : null}
+                    <MessageBubble role={message.role} content={content} />
+                  </Box>
+                );
+              })}
+            </Flex>
+          )}
+        </Box>
+
+        <Flex px={4} py={3} borderTop="1px solid" borderColor="gray.200" gap={2} bg="white">
+          <Input
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder="输入你的问题..."
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                handleSend();
+              }
+            }}
+            isDisabled={isSending}
+          />
+          <IconButton
+            aria-label="Send"
+            onClick={handleSend}
+            colorScheme="purple"
+            isLoading={isSending}
+            icon={<Text fontSize="sm">发送</Text>}
+          />
+          {streamingMessageId ? (
+            <Button variant="ghost" size="sm" isDisabled>
+              生成中...
+            </Button>
+          ) : null}
+        </Flex>
+      </Flex>
     </Flex>
   );
 };

@@ -1,4 +1,11 @@
-import type { ToolCall, ToolCallChunk } from "@langchain/core/messages";
+export type ToolCall = {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
 
 export type ConversationMessage = {
   role: "user" | "assistant" | "system" | "tool";
@@ -7,7 +14,6 @@ export type ConversationMessage = {
   name?: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
-  tool_call_chunks?: ToolCallChunk[];
   additional_kwargs?: Record<string, unknown>;
   status?: "success" | "error";
   artifact?: unknown;

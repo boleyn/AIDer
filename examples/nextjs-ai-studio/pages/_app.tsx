@@ -6,7 +6,7 @@ import { AuthProvider } from "../contexts/AuthContext";
 // Import polyfill - it runs immediately on import
 import "../utils/cryptoPolyfill";
 import "../styles/globals.css";
-import "../styles/assistant-ui.css";
+import "../styles/chat.css";
 import AuthGuard from "../components/auth/AuthGuard";
 
 const App = ({ Component, pageProps }: AppProps) => {

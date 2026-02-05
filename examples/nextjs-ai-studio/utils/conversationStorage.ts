@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import type { ToolCall, ToolCallChunk } from "@langchain/core/messages";
+import type { ToolCall } from "../types/conversation";
 import { getMongoDb } from "./mongo";
 
 export type ConversationMessage = {
@@ -9,7 +9,6 @@ export type ConversationMessage = {
   name?: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
-  tool_call_chunks?: ToolCallChunk[];
   additional_kwargs?: Record<string, unknown>;
   status?: "success" | "error";
   artifact?: unknown;

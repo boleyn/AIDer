@@ -1,13 +1,9 @@
-import { MultiServerMCPClient } from "@langchain/mcp-adapters";
-import type { ToolInterface } from "@langchain/core/tools";
+import type { AgentToolDefinition } from "./agent/tools/types";
 
 export type MCPServerConfig = {
   name: string;
   url: string;
 };
-
-let cachedClient: MultiServerMCPClient | null = null;
-let cachedServersKey = "";
 
 function parseServers(raw: string | undefined): MCPServerConfig[] {
   if (!raw) return [];
@@ -28,27 +24,9 @@ function parseServers(raw: string | undefined): MCPServerConfig[] {
     .filter((entry) => entry.url.length > 0);
 }
 
-export async function loadMcpTools(): Promise<ToolInterface[]> {
+export async function loadMcpTools(): Promise<AgentToolDefinition[]> {
   const servers = parseServers(process.env.MCP_SERVER_URLS || process.env.MCP_SERVERS);
-  if (servers.length === 0) {
-    return [];
-  }
-
-  const key = JSON.stringify(servers);
-  if (!cachedClient || cachedServersKey !== key) {
-    cachedClient = new MultiServerMCPClient({
-      mcpServers: Object.fromEntries(
-        servers.map((server) => [
-          server.name,
-          {
-            transport: "sse" as const,
-            url: server.url,
-          },
-        ])
-      ),
-    });
-    cachedServersKey = key;
-  }
-
-  return cachedClient.getTools() as Promise<ToolInterface[]>;
+  if (servers.length === 0) return [];
+  // MCP integration relied on LangChain adapters. Keep placeholder for future adapters.
+  return [];
 }

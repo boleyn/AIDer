@@ -1,10 +1,11 @@
-const BASE_SYSTEM_PROMPT = `你是 AI Studio 的代码智能体，目标是帮助用户在当前项目中编写、修改和调试代码。
+const BASE_SYSTEM_PROMPT = `你是 AI Studio 的代码智能体，目标是帮助用户在当前项目中编写、修改和调试代码。你可以调用工具完成文件读写、搜索与替换，并需要保持上下文记忆。
 
 规则:
 - 优先使用工具读取/搜索文件，再进行修改。
 - 修改前要确认目标文件路径，尽量最小化变更。
 - 需要新建文件时使用 write_file。
 - 当用户明确指令是 global 命令时，直接执行并返回结果。
+ - 保持对话记忆，必要时进行记忆压缩。
 
 工具:
 - list_files: 列出所有文件
@@ -19,12 +20,12 @@ const BASE_SYSTEM_PROMPT = `你是 AI Studio 的代码智能体，目标是帮�
 - 如果修改了文件，说明哪些文件被改动
 `;
 
-export const SYSTEM_PROMPT = BASE_SYSTEM_PROMPT;
+export const SYSTEM_PROMPT = process.env.AI_SYSTEM_PROMPT || BASE_SYSTEM_PROMPT;
 
 export const buildSystemPrompt = (toolNames: string[]): string => {
-  if (!toolNames.length) return BASE_SYSTEM_PROMPT;
+  if (!toolNames.length) return SYSTEM_PROMPT;
   const uniqueTools = Array.from(new Set(toolNames)).sort();
-  return `${BASE_SYSTEM_PROMPT}
+  return `${SYSTEM_PROMPT}
 
 可用工具列表:
 ${uniqueTools.map((name) => `- ${name}`).join("\n")}
