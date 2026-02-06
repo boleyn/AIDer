@@ -17,6 +17,25 @@ yarn dev
 - `http://localhost:3000/project/hello`
 - `http://localhost:3000/project/three`
 
+## 目录分包（重构后）
+
+项目已按前后端一体化方式拆分到 `src/`：
+
+- `src/pages`：页面路由与 API Route（Next.js Pages Router）
+- `src/server`：服务端能力（鉴权、存储仓库、Agent 工具）
+- `src/features`：业务特性模块（如 `chat`、`dashboard`、`auth`）
+- `src/components`：跨页面 UI 组件
+- `src/shared`：跨业务共享基础能力（消息解析、流式请求、polyfill）
+- `src/ai`、`src/global`：AI 领域模型与兼容层
+- `src/utils`：预留（本次已将通用能力收口到 `src/shared`）
+
+并新增别名：
+
+- `@server/* -> src/server/*`
+- `@features/* -> src/features/*`
+- `@shared/* -> src/shared/*`
+- `@/* -> src/*`
+
 ## AI 代码智能体
 
 - API：`POST /api/agent?token=<token>`

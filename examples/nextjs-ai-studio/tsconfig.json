@@ -17,8 +17,12 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
-      "@aistudio/*": ["./*"]
+      "@/*": ["./src/*"],
+      "@aistudio/*": ["./src/*"],
+      "@server/*": ["./src/server/*"],
+      "@features/*": ["./src/features/*"],
+      "@components/*": ["./src/components/*"],
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
