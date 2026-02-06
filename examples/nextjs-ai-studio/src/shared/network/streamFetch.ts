@@ -1,5 +1,6 @@
 import { fetchEventSource, EventStreamContentType } from "@fortaine/fetch-event-source";
 import { SseResponseEventEnum } from "@shared/network/sseEvents";
+export { SseResponseEventEnum };
 
 export type SseEventName = typeof SseResponseEventEnum[keyof typeof SseResponseEventEnum];
 

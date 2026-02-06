@@ -10,12 +10,7 @@ import {
   AccordionPanel,
   Button
 } from '@chakra-ui/react';
-import { useContextSelector } from 'use-context-selector';
 import { useTranslation } from 'next-i18next';
-import { ChatBoxContext } from '../../core/chat/ChatContainer/ChatBox/Provider';
-import { WorkflowRuntimeContext } from '../../core/chat/ChatContainer/context/workflowRuntimeContext';
-import { ChatRecordContext } from '@/web/core/chat/context/chatRecordContext';
-import { updateInstructionStatus } from '@/web/core/chat/api';
 import MyIcon from '@/components/common/MyIcon';
 import Avatar from '@/components/common/MyAvatar';
 import MyTag from '@/components/common/MyTag';
@@ -37,13 +32,6 @@ export interface IframeInstructionProps {
 
 const IframeInstructionBlock: React.FC<IframeInstructionProps> = ({ code, dataId }) => {
   const { t } = useTranslation();
-  const appId = useContextSelector(WorkflowRuntimeContext, (v) => v.appId);
-  const chatId = useContextSelector(WorkflowRuntimeContext, (v) => v.chatId);
-  const outLinkAuthData = useContextSelector(WorkflowRuntimeContext, (v) => v.outLinkAuthData);
-  const setChatRecords = useContextSelector(
-    ChatRecordContext,
-    (v: any) => v.setChatRecords
-  ) as React.Dispatch<React.SetStateAction<any[]>>;
   const { copyData } = useCopyData();
 
   const [instructionData, setInstructionData] = useState<InstructionData | null>(null);
@@ -199,81 +187,6 @@ const IframeInstructionBlock: React.FC<IframeInstructionProps> = ({ code, dataId
           return { ...prev, status, executionTime, error };
         });
 
-        // 异步更新数据库（只有在 iframe 环境中才调用）
-        if (appId && chatId && dataId && targetIndex !== undefined) {
-          updateInstructionStatus({
-            appId,
-            chatId,
-            dataId: dataId,
-            instructionIndex: targetIndex,
-            status,
-            executionTime,
-            error,
-            ...(outLinkAuthData || {})
-          })
-            .catch((err) => {
-              console.error('Failed to update instruction status:', err);
-            })
-            .then(() => {
-              // 更新成功后，刷新缓存
-              setChatRecords((prev: any[]) => {
-                return prev.map((item: any) => {
-                  // 找到包含这个 dataId 的记录，更新其中的 instruction 状态
-                  if (item.dataId === dataId && item.value) {
-                    const newValue = item.value.map((val: any) => {
-                      if (val.type === 'text' && val.text?.content) {
-                        const content = val.text.content;
-                        const instructionPattern = /```instruction\s*\n([\s\S]*?)\n```/g;
-                        let instructionBlockIndex = 0;
-                        const newContent = content.replace(
-                          instructionPattern,
-                          (match: string, jsonContent: string) => {
-                            try {
-                              const parsedInstruction = JSON.parse(jsonContent.trim());
-                              const currentIndex =
-                                parsedInstruction.index !== undefined
-                                  ? parsedInstruction.index
-                                  : instructionBlockIndex;
-
-                              if (currentIndex === targetIndex) {
-                                const updatedData = {
-                                  ...parsedInstruction,
-                                  status,
-                                  executionTime,
-                                  error
-                                };
-                                return `\`\`\`instruction\n${JSON.stringify(updatedData, null, 2)}\n\`\`\``;
-                              }
-                              instructionBlockIndex++;
-                            } catch (e) {
-                              instructionBlockIndex++;
-                            }
-                            return match;
-                          }
-                        );
-
-                        return {
-                          ...val,
-                          text: {
-                            ...val.text,
-                            content: newContent
-                          }
-                        };
-                      }
-                      return val;
-                    });
-
-                    return {
-                      ...item,
-                      value: newValue
-                    };
-                  }
-                  return item;
-                });
-              });
-            });
-        }
-
         // 如果是最终状态（completed 或 error），重置发送标记，允许重试
         if (status === 'completed' || status === 'error') {
           hasSentInstructionRef.current = false;
@@ -283,7 +196,7 @@ const IframeInstructionBlock: React.FC<IframeInstructionProps> = ({ code, dataId
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [appId, chatId, dataId, outLinkAuthData, setChatRecords, instructionData]);
+  }, [dataId, instructionData]);
 
   // 执行指令的处理函数
   const handleExecute = useCallback(() => {

@@ -3,9 +3,6 @@ import Markdown from "@/components/Markdown";
 import { extractText } from "@shared/chat/messages";
 import type { ConversationMessage } from "@/types/conversation";
 import { useMemo } from "react";
-import AIResponseBox from "@/components/core/chat/components/AIResponseBox";
-import { ChatItemValueTypeEnum } from "@/global/core/chat/constants";
-import type { AIChatItemValueItemType, ToolModuleResponseItemType } from "@/global/core/chat/type";
 
 const normalizeContent = (content: unknown) => {
   const text = extractText(content);
@@ -63,29 +60,6 @@ const ChatItem = ({ message, isStreaming }: { message: ConversationMessage; isSt
     };
   }, [content, isTool, message.name]);
 
-  const aiValue: AIChatItemValueItemType | null = useMemo(() => {
-    if (isTool && toolData) {
-      const toolItem: ToolModuleResponseItemType = {
-        id: toolData.toolName,
-        toolName: toolData.toolName,
-        toolAvatar: toolData.toolAvatar,
-        params: toolData.params || "",
-        response: toolData.response || "",
-      };
-      return {
-        type: ChatItemValueTypeEnum.tool,
-        tools: [toolItem],
-      };
-    }
-    if (!isUser && !isSystem) {
-      return {
-        type: ChatItemValueTypeEnum.text,
-        text: { content: content || "" },
-      };
-    }
-    return null;
-  }, [content, isTool, isUser, isSystem, toolData]);
-
   return (
     <Flex justify={align} w="full">
       <Flex
@@ -107,19 +81,28 @@ const ChatItem = ({ message, isStreaming }: { message: ConversationMessage; isSt
           color="gray.700"
           minW="120px"
         >
-          {aiValue ? (
-            <AIResponseBox
-              chatItemDataId={message.id || "chat-item"}
-              value={aiValue}
-              isLastResponseValue
-              isChatting={Boolean(isStreaming)}
-            />
+          {isTool && toolData ? (
+            <Flex direction="column" gap={2}>
+              <Text fontSize="xs" color="orange.700" fontWeight="600">
+                工具：{toolData.toolName || "未知工具"}
+              </Text>
+              {toolData.params ? (
+                <Box as="pre" fontSize="xs" whiteSpace="pre-wrap" color="gray.600" bg="white" p={2} borderRadius="md">
+                  {toolData.params}
+                </Box>
+              ) : null}
+              {toolData.response ? (
+                <Markdown source={toolData.response} />
+              ) : (
+                <Text fontSize="xs" color="gray.500">等待工具返回结果...</Text>
+              )}
+            </Flex>
           ) : isSystem ? (
             <Text fontSize="xs" color="gray.500">
               {content}
             </Text>
           ) : (
-            <Markdown source={content || (isStreaming ? "…" : "")} showAnimation={Boolean(isStreaming)} />
+            <Markdown source={content || (isStreaming ? "…" : "")} />
           )}
         </Box>
       </Flex>

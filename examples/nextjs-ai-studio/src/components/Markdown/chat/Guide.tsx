@@ -6,11 +6,6 @@ import RemarkMath from 'remark-math';
 import RehypeKatex from 'rehype-katex';
 import RemarkBreaks from 'remark-breaks';
 import { EventNameEnum, eventBus } from '@/web/common/utils/eventbus';
-import { useContextSelector } from 'use-context-selector';
-import { ChatRecordContext } from '@/web/core/chat/context/chatRecordContext';
-import { ChatBoxContext } from '@/components/core/chat/ChatContainer/ChatBox/Provider';
-import { checkIsInteractiveByHistories } from '@/components/core/chat/ChatContainer/ChatBox/utils';
-import { VariableInputEnum } from '@/global/core/workflow/constants';
 
 import 'katex/dist/katex.min.css';
 import styles from '../index.module.scss';
@@ -44,38 +39,7 @@ import Image from '../img/Image';
 function MyLink(e: any) {
   const href = e.href;
   const text = String(e.children);
-
-  // 根据最近一条 AI 消息是否进入交互态，近似判断 ChatInput 是否显示（显示则可点击）
-  const chatRecords = useContextSelector(ChatRecordContext, (v) => v.chatRecords);
-  const isInteractive = useMemo(
-    () => checkIsInteractiveByHistories(chatRecords as any),
-    [chatRecords]
-  );
-
-  // 计算与 ChatInput 相同的 chatStarted 逻辑
-  const variableList = useContextSelector(ChatBoxContext, (v) => v.variableList);
-  const allVariableList = useContextSelector(ChatBoxContext, (v) => v.allVariableList);
-  const chatType = useContextSelector(ChatBoxContext, (v) => v.chatType);
-  const chatStartedWatch = useContextSelector(ChatBoxContext, (v) => v.chatStartedWatch);
-  const hideVariableInput = useContextSelector(ChatBoxContext, (v) => v.hideVariableInput);
-  const externalVariableList = useMemo(() => {
-    if (chatType === 'chat') {
-      return allVariableList.filter((item) => item.type === VariableInputEnum.custom);
-    }
-    return [] as typeof allVariableList;
-  }, [allVariableList, chatType]);
-
-  // 与 ChatBox 保持完全一致的 chatStarted 计算逻辑
-  const chatStarted = useMemo(() => {
-    return (
-      chatStartedWatch ||
-      chatRecords.length > 0 ||
-      hideVariableInput ||
-      [...(variableList || []), ...externalVariableList].length === 0
-    );
-  }, [chatStartedWatch, chatRecords.length, hideVariableInput, variableList, externalVariableList]);
-
-  const canClick = chatStarted && !isInteractive;
+  const canClick = true;
 
   return !!href ? (
     <Link href={href} target={'_blank'}>
