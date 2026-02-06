@@ -45,7 +45,6 @@ import {
   Input_Template_Stream_MODE,
   Input_Template_UserChatInput
 } from './template/input';
-import { i18nT } from '../../../web/i18n/utils';
 import { type RuntimeUserPromptType, type UserChatItemType } from '../../core/chat/type';
 import { getNanoid } from '../../common/string/tools';
 import { ChatRoleEnum } from '../../core/chat/constants';
@@ -355,8 +354,8 @@ export const appData2FlowNodeIO = ({
         id: NodeOutputKeyEnum.history,
         key: NodeOutputKeyEnum.history,
         required: true,
-        label: i18nT('common:core.module.output.label.New context'),
-        description: i18nT('common:core.module.output.description.New context'),
+        label: '新上下文',
+        description: '新的对话上下文',
         valueType: WorkflowIOValueTypeEnum.chatHistory,
         valueDesc: chatHistoryValueDesc,
         type: FlowNodeOutputTypeEnum.static
@@ -365,8 +364,8 @@ export const appData2FlowNodeIO = ({
         id: NodeOutputKeyEnum.answerText,
         key: NodeOutputKeyEnum.answerText,
         required: false,
-        label: i18nT('common:core.module.output.label.Ai response content'),
-        description: i18nT('common:core.module.output.description.Ai response content'),
+        label: 'AI 回复内容',
+        description: 'AI 生成的回复文本',
         valueType: WorkflowIOValueTypeEnum.string,
         type: FlowNodeOutputTypeEnum.static
       }

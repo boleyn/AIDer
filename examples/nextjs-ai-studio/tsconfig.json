@@ -22,6 +22,7 @@
       "@server/*": ["./src/server/*"],
       "@features/*": ["./src/features/*"],
       "@components/*": ["./src/components/*"],
+      "@web/*": ["./src/web/*"],
       "@shared/*": ["./src/shared/*"]
     }
   },

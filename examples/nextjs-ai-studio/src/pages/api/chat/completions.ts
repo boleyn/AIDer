@@ -1,10 +1,10 @@
 import type { ChatCompletionTool, ChatCompletionMessageParam } from "@aistudio/ai/compat/global/core/ai/type";
-import { runAgentCall } from "@aistudio/ai/llm/agentCall";
 import { formatGlobalResult } from "@server/agent/globalResultFormatter";
 import { parseGlobalCommand, runGlobalAction, type ChangeTracker } from "@server/agent/globalTools";
 import { loadMcpTools } from "@server/agent/mcpClient";
 import { getAgentRuntimeConfig } from "@server/agent/runtimeConfig";
 import { createProjectTools } from "@server/agent/tools";
+import { runSimpleAgentWorkflow } from "@server/agent/workflow/simpleAgentWorkflow";
 import { requireAuth } from "@server/auth/session";
 import {
   getConversation,
@@ -15,7 +15,7 @@ import {
 import { getProject } from "@server/projects/projectStorage";
 import { extractText, type IncomingMessage } from "@shared/chat/messages";
 import { createId } from "@shared/chat/messages";
-import type { AgentMessage } from "@shared/chat/messages";
+import { SseResponseEventEnum } from "@shared/network/sseEvents";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 const getToken = (req: NextApiRequest): string | null => {
@@ -28,22 +28,10 @@ const getToken = (req: NextApiRequest): string | null => {
   return headerToken ?? bodyToken ?? queryToken;
 };
 
-const sendSse = (res: NextApiResponse, data: string) => {
-  res.write(`data: ${data}\n\n`);
-};
-
 const sendSseEvent = (res: NextApiResponse, event: string, data: string) => {
   res.write(`event: ${event}\n`);
   res.write(`data: ${data}\n\n`);
 };
-
-const SseResponseEventEnum = {
-  answer: "answer",
-  toolCall: "toolCall",
-  toolParams: "toolParams",
-  toolResponse: "toolResponse",
-  error: "error",
-} as const;
 
 const startSse = (res: NextApiResponse) => {
   res.statusCode = 200;
@@ -78,14 +66,26 @@ const toIncomingMessages = (messages: unknown): IncomingMessage[] => {
     .filter((message): message is IncomingMessage => Boolean(message));
 };
 
-const toConversationMessage = (message: AgentMessage): ConversationMessage => {
+const CONVERSATION_ROLES = ["user", "assistant", "system", "tool"] as const;
+type ConversationRole = (typeof CONVERSATION_ROLES)[number];
+
+const chatCompletionMessageToConversationMessage = (
+  message: ChatCompletionMessageParam
+): ConversationMessage => {
+  const role = CONVERSATION_ROLES.includes(message.role as ConversationRole)
+    ? (message.role as ConversationRole)
+    : "assistant";
+  const content =
+    typeof (message as { content?: unknown }).content === "string"
+      ? (message as { content: string }).content
+      : extractText((message as { content?: unknown }).content);
   return {
-    role: message.role,
-    content: message.content ?? "",
-    id: message.id ?? createId(),
-    name: message.name,
-    tool_call_id: message.tool_call_id,
-    tool_calls: message.tool_calls,
+    role,
+    content: content ?? "",
+    id: (message as { id?: string }).id ?? createId(),
+    name: (message as { name?: string }).name,
+    tool_call_id: (message as { tool_call_id?: string }).tool_call_id,
+    tool_calls: (message as { tool_calls?: ConversationMessage["tool_calls"] }).tool_calls,
   };
 };
 
@@ -100,6 +100,50 @@ const normalizeStoredMessages = (messages: ConversationMessage[]) => {
   }
   return result.reverse();
 };
+
+const createNodeResponseMessages = (
+  responses: Array<{
+    nodeId: string;
+    moduleName: string;
+    moduleType: "tool";
+    runningTime: number;
+    status: "success" | "error";
+    toolInput: unknown;
+    toolRes: unknown;
+  }>
+): ConversationMessage[] =>
+  responses.map((item, index) => {
+    const statusLabel = item.status === "error" ? "❌" : "✅";
+    const runningTimeLabel = Number.isFinite(item.runningTime)
+      ? `${item.runningTime.toFixed(2)}s`
+      : "";
+    const title = [item.moduleName, statusLabel, runningTimeLabel].filter(Boolean).join(" · ");
+
+    return {
+      role: "tool",
+      id: `node-response-${item.nodeId}-${index}-${Date.now()}`,
+      name: title,
+      content: JSON.stringify({
+        toolName: title,
+        params:
+          typeof item.toolInput === "string"
+            ? item.toolInput
+            : JSON.stringify(item.toolInput, null, 2),
+        response:
+          typeof item.toolRes === "string"
+            ? item.toolRes
+            : JSON.stringify(
+                {
+                  result: item.toolRes,
+                  runningTime: item.runningTime,
+                  status: item.status,
+                },
+                null,
+                2
+              ),
+      }),
+    };
+  });
 
 const getTitleFromMessages = (messages: ConversationMessage[]): string | undefined => {
   const lastUser = [...messages].reverse().find((message) => message.role === "user");
@@ -139,6 +183,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : undefined;
   const stream = req.body?.stream === true;
   const model = typeof req.body?.model === "string" ? req.body.model : "agent";
+  const created = Math.floor(Date.now() / 1000);
+
+  const emitAnswerChunk = (text: string, finishReason: string | null = null) => {
+    sendSseEvent(
+      res,
+      SseResponseEventEnum.answer,
+      JSON.stringify({
+        id: `chatcmpl-${Date.now()}`,
+        object: "chat.completion.chunk",
+        created,
+        model,
+        choices: [
+          {
+            index: 0,
+            delta: text ? { content: text } : {},
+            finish_reason: finishReason,
+          },
+        ],
+      })
+    );
+  };
 
   const project = await getProject(token);
   if (!project) {
@@ -182,36 +247,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await appendAssistantError(parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""));
         if (stream) {
           startSse(res);
-          const created = Math.floor(Date.now() / 1000);
-          sendSse(
-            res,
-            JSON.stringify({
-              id: `chatcmpl-${Date.now()}`,
-              object: "chat.completion.chunk",
-              created,
-              model,
-              choices: [
-                {
-                  index: 0,
-                  delta: { content: parsed.message + (parsed.hint ? `\n${parsed.hint}` : "") },
-                  finish_reason: null,
-                },
-              ],
-            })
-          );
-          sendSse(
-            res,
-            JSON.stringify({
-              id: `chatcmpl-${Date.now()}`,
-              object: "chat.completion.chunk",
-              created,
-              model,
-              choices: [
-                { index: 0, delta: {}, finish_reason: "stop" },
-              ],
-            })
-          );
-          sendSse(res, "[DONE]");
+          emitAnswerChunk(parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""));
+          emitAnswerChunk("", "stop");
+          sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
           res.end();
           return;
         }
@@ -249,34 +287,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (stream) {
         startSse(res);
-        const created = Math.floor(Date.now() / 1000);
-        sendSse(
-          res,
-          JSON.stringify({
-            id: `chatcmpl-${Date.now()}`,
-            object: "chat.completion.chunk",
-            created,
-            model,
-            choices: [
-              {
-                index: 0,
-                delta: { content: assistantResponse },
-                finish_reason: null,
-              },
-            ],
-          })
-        );
-        sendSse(
-          res,
-          JSON.stringify({
-            id: `chatcmpl-${Date.now()}`,
-            object: "chat.completion.chunk",
-            created,
-            model,
-            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-          })
-        );
-        sendSse(res, "[DONE]");
+        emitAnswerChunk(assistantResponse);
+        emitAnswerChunk("", "stop");
+        sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
         res.end();
         return;
       }
@@ -334,141 +347,70 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     startSse(res);
   }
 
-  const created = Math.floor(Date.now() / 1000);
-
-  type AgentRunBody = Parameters<typeof runAgentCall>[0]["body"];
-  const agentRunBody: AgentRunBody = {
-    model: selectedModel,
-    messages: toAgentMessages(contextMessages),
-    max_tokens: undefined,
-    tools,
-    temperature: runtimeConfig.temperature,
+  const workflowStartAt = Date.now();
+  const { runResult, finalMessage, flowResponses } = await runSimpleAgentWorkflow({
+    selectedModel,
     stream,
-    toolCallMode: "toolChoice",
-  };
+    recursionLimit: runtimeConfig.recursionLimit || 6,
+    temperature: runtimeConfig.temperature,
+    messages: toAgentMessages(contextMessages),
+    allTools,
+    tools,
+    onEvent: (event, data) => {
+      if (!stream) return;
 
-  const runResult = await runAgentCall({
-    maxRunAgentTimes: runtimeConfig.recursionLimit || 6,
-    body: agentRunBody,
-    handleInteractiveTool: async () => ({
-      response: "",
-      assistantMessages: [],
-      usages: [],
-      stop: true,
-    }),
-    onStreaming: stream
-      ? ({ text }) => {
-          if (!text) return;
-          sendSseEvent(
-            res,
-            SseResponseEventEnum.answer,
-            JSON.stringify({
-              id: `chatcmpl-${Date.now()}`,
-              object: "chat.completion.chunk",
-              created,
-              model,
-              choices: [
-                {
-                  index: 0,
-                  delta: { content: text },
-                  finish_reason: null,
-                },
-              ],
-            })
-          );
-        }
-      : undefined,
-    onToolCall: stream
-      ? ({ call }) => {
-          sendSseEvent(
-            res,
-            SseResponseEventEnum.toolCall,
-            JSON.stringify({
-              id: call.id,
-              toolName: call.function?.name,
-            })
-          );
-        }
-      : undefined,
-    onToolParam: stream
-      ? ({ tool, params }) => {
-          sendSseEvent(
-            res,
-            SseResponseEventEnum.toolParams,
-            JSON.stringify({
-              id: tool.id,
-              toolName: tool.function?.name,
-              params,
-            })
-          );
-        }
-      : undefined,
-    handleToolResponse: async ({ call }) => {
-      const tool = allTools.find((item) => item.name === call.function.name);
-      let response = "";
-      if (!tool) {
-        response = `未找到工具: ${call.function.name}`;
-      } else {
-        try {
-          const parsed = call.function.arguments ? JSON.parse(call.function.arguments) : {};
-          const result = await tool.run(parsed);
-          response = typeof result === "string" ? result : JSON.stringify(result);
-        } catch (error) {
-          response = error instanceof Error ? error.message : "工具执行失败";
-        }
-      }
-      const formatArgs = () => {
-        if (!call.function.arguments) return "";
-        try {
-          const parsed = JSON.parse(call.function.arguments);
-          return JSON.stringify(parsed, null, 2);
-        } catch {
-          return call.function.arguments;
-        }
-      };
-      const toolPayload = {
-        toolName: call.function.name,
-        params: formatArgs(),
-        response,
-      };
-      const toolContent = JSON.stringify(toolPayload);
-      if (stream) {
-        sendSseEvent(
-          res,
-          SseResponseEventEnum.toolResponse,
-          JSON.stringify({
-            id: call.id,
-            toolName: call.function.name,
-            params: formatArgs(),
-            response,
-          })
-        );
+      if (event === SseResponseEventEnum.answer) {
+        const text = typeof data.text === "string" ? data.text : "";
+        if (!text) return;
+        emitAnswerChunk(text);
+        return;
       }
 
-      return {
-        response: toolContent,
-        assistantMessages: [
-          {
-            role: "tool",
-            tool_call_id: call.id,
-            name: call.function.name,
-            content: toolContent,
-          } as ChatCompletionMessageParam,
-        ],
-        usages: [],
-      };
+      sendSseEvent(res, event, JSON.stringify(data));
     },
   });
+  const durationSeconds = Number(((Date.now() - workflowStartAt) / 1000).toFixed(2));
 
-  const assistantMessage =
-    [...runResult.assistantMessages].reverse().find((item) => item.role === "assistant") ||
-    runResult.assistantMessages[runResult.assistantMessages.length - 1];
-  const finalMessage = assistantMessage ? extractText(assistantMessage.content) : "";
+  if (stream) {
+    sendSseEvent(
+      res,
+      SseResponseEventEnum.workflowDuration,
+      JSON.stringify({ durationSeconds })
+    );
+  }
 
   if (conversationId) {
     const storedMessages = normalizeStoredMessages(
-      runResult.completeMessages.map(toConversationMessage)
+      runResult.completeMessages.map(chatCompletionMessageToConversationMessage)
     );
+
+    const assistantIndex = (() => {
+      for (let i = storedMessages.length - 1; i >= 0; i -= 1) {
+        if (storedMessages[i].role === "assistant") return i;
+      }
+      return -1;
+    })();
+    if (assistantIndex >= 0) {
+      const current = storedMessages[assistantIndex];
+      const currentKwargs =
+        current.additional_kwargs && typeof current.additional_kwargs === "object"
+          ? current.additional_kwargs
+          : {};
+      storedMessages[assistantIndex] = {
+        ...current,
+        additional_kwargs: {
+          ...currentKwargs,
+          responseData: flowResponses,
+          durationSeconds,
+        },
+      };
+    }
+
+    const nodeResponseMessages = createNodeResponseMessages(flowResponses);
+    if (nodeResponseMessages.length > 0) {
+      storedMessages.push(...nodeResponseMessages);
+    }
+
     const nextTitle = getTitleFromMessages(storedMessages);
     await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
   }
@@ -479,6 +421,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
       model,
+      responseData: flowResponses,
+      durationSeconds,
       choices: [
         {
           index: 0,
@@ -490,23 +434,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  sendSseEvent(
-    res,
-    SseResponseEventEnum.answer,
-    JSON.stringify({
-      id: `chatcmpl-${Date.now()}`,
-      object: "chat.completion.chunk",
-      created,
-      model,
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: "stop",
-        },
-      ],
-    })
-  );
+  emitAnswerChunk("", "stop");
   sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
   res.end();
 }

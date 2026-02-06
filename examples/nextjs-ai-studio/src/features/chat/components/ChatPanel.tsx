@@ -6,9 +6,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useConversations } from "../hooks/useConversations";
 import { getChatModels } from "../services/models";
+import { getExecutionSummary } from "../utils/executionSummary";
+import {
+  upsertFlowNodeToolMessage,
+  type FlowNodeResponsePayload,
+} from "../utils/flowNodeMessages";
 
 import ChatHeader from "./ChatHeader";
 import ChatItem from "./ChatItem";
+import ExecutionSummaryRow from "./ExecutionSummaryRow";
 
 import type { ConversationMessage } from "@/types/conversation";
 
@@ -22,6 +28,10 @@ interface ToolStreamPayload {
   toolName?: string;
   params?: string;
   response?: string;
+}
+
+interface WorkflowDurationPayload {
+  durationSeconds?: number;
 }
 
 const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; onFilesUpdated?: (files: Record<string, { code: string }>) => void; height?: string; }) => {
@@ -116,6 +126,34 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; 
 
     const abortCtrl = new AbortController();
     try {
+      const updateAssistantMetadata = (
+        updater: (current: Record<string, unknown>) => Record<string, unknown>
+      ) => {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id !== assistantMessageId) return msg;
+            const current =
+              msg.additional_kwargs && typeof msg.additional_kwargs === "object"
+                ? msg.additional_kwargs
+                : {};
+            return {
+              ...msg,
+              additional_kwargs: updater(current),
+            };
+          })
+        );
+      };
+
+      const upsertFlowNodeResponseMessage = (payload: FlowNodeResponsePayload) => {
+        setMessages((prev) =>
+          upsertFlowNodeToolMessage({
+            assistantMessageId,
+            messages: prev,
+            payload,
+          })
+        );
+      };
+
       const upsertToolMessage = (id: string, nextPartial: { toolName?: string; params?: string; response?: string }) => {
         setMessages((prev) => {
           const index = prev.findIndex((item) => item.id === id);
@@ -211,6 +249,29 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; 
             }
             return;
           }
+          if (item.event === SseResponseEventEnum.flowNodeResponse) {
+            const payload = item as FlowNodeResponsePayload;
+            upsertFlowNodeResponseMessage(payload);
+            updateAssistantMetadata((current) => {
+              const currentResponseData = Array.isArray(current.responseData)
+                ? current.responseData
+                : [];
+              return {
+                ...current,
+                responseData: [...currentResponseData, payload],
+              };
+            });
+            return;
+          }
+          if (item.event === SseResponseEventEnum.workflowDuration) {
+            const payload = item as WorkflowDurationPayload;
+            if (typeof payload.durationSeconds !== "number") return;
+            updateAssistantMetadata((current) => ({
+              ...current,
+              durationSeconds: payload.durationSeconds,
+            }));
+            return;
+          }
         },
       });
     } catch (error) {
@@ -264,6 +325,16 @@ const ChatPanel = ({ token, onFilesUpdated, height = "100%" }: { token: string; 
                     isStreaming={message.id === streamingMessageId}
                     message={message}
                   />
+                  {(() => {
+                    const summary = getExecutionSummary(message);
+                    if (!summary) return null;
+                    return (
+                      <ExecutionSummaryRow
+                        durationSeconds={summary.durationSeconds}
+                        nodeCount={summary.nodeCount}
+                      />
+                    );
+                  })()}
                 </Box>
               ))}
             </Flex>

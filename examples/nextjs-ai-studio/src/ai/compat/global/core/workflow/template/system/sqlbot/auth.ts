@@ -1,4 +1,3 @@
-import { i18nT } from '../../../../../../web/i18n/utils';
 import {
   FlowNodeTemplateTypeEnum,
   NodeInputKeyEnum,
@@ -14,40 +13,23 @@ import { type FlowNodeTemplateType } from '../../../type/node.d';
 import { Output_Template_AddOutput } from '../../output';
 
 export const SqlbotAuthNode: FlowNodeTemplateType = {
-  // 节点唯一标识
   id: FlowNodeTypeEnum.sqlbotAuth,
-
-  // 节点模板类型（交互节点）
   templateType: FlowNodeTemplateTypeEnum.interactive,
-
-  // 节点类型
   flowNodeType: FlowNodeTypeEnum.sqlbotAuth,
-
-  // 连接点配置（允许输入输出连接）
   showSourceHandle: true,
   showTargetHandle: true,
-
-  // 节点图标路径
   avatar: 'core/workflow/template/httpRequest',
   colorSchema: 'purple',
-
-  // 节点名称
-  name: i18nT('app:workflow.sqlbot_auth'),
-
-  // 节点简介
-  intro: i18nT('app:workflow.sqlbot_auth_tip'),
-
-  // 是否可作为工具调用
+  name: 'SQL Bot 鉴权',
+  intro: '配置 SQL Bot 数据源鉴权',
   isTool: true,
-
-  // 输入配置
   inputs: [
     {
       key: NodeInputKeyEnum.description,
       renderTypeList: [FlowNodeInputTypeEnum.textarea],
       valueType: WorkflowIOValueTypeEnum.string,
-      label: i18nT('app:workflow.select_description'),
-      description: i18nT('app:workflow.sqlbot_auth_select_description'),
+      label: '选择说明',
+      description: '请选择要访问的数据源',
       value: '请选择要访问的数据源',
       placeholder: '请选择要访问的数据源'
     },
@@ -55,8 +37,8 @@ export const SqlbotAuthNode: FlowNodeTemplateType = {
       key: 'sqlbot_base_url',
       renderTypeList: [FlowNodeInputTypeEnum.input, FlowNodeInputTypeEnum.reference],
       valueType: WorkflowIOValueTypeEnum.string,
-      label: i18nT('app:workflow.sqlbot_base_url'),
-      description: i18nT('app:workflow.sqlbot_base_url_description'),
+      label: 'SQL Bot 服务地址',
+      description: 'SQL Bot 服务 base URL',
       placeholder: 'http://10.21.81.6:8000',
       required: true
     },
@@ -64,25 +46,23 @@ export const SqlbotAuthNode: FlowNodeTemplateType = {
       key: 'manual_final_user_id',
       renderTypeList: [FlowNodeInputTypeEnum.input],
       valueType: WorkflowIOValueTypeEnum.string,
-      label: i18nT('app:workflow.manual_final_user_id'),
-      description: i18nT('app:workflow.manual_final_user_id_description'),
+      label: '手动指定用户 ID',
+      description: '留空则自动从系统变量获取',
       placeholder: '留空则自动从系统变量获取',
       required: false
     }
   ],
-
-  // 输出配置
   outputs: [
     {
       ...Output_Template_AddOutput,
-      label: i18nT('app:workflow.sqlbot_extract_output'),
-      description: i18nT('app:workflow.sqlbot_extract_output_description')
+      label: '解析结果',
+      description: 'SQL Bot 解析后的输出'
     },
     {
       id: NodeOutputKeyEnum.error,
       key: NodeOutputKeyEnum.error,
-      label: i18nT('workflow:request_error'),
-      description: i18nT('app:workflow.sqlbot_error_description'),
+      label: '请求错误',
+      description: '请求失败时的错误信息',
       valueType: WorkflowIOValueTypeEnum.object,
       type: FlowNodeOutputTypeEnum.static
     },
@@ -90,8 +70,8 @@ export const SqlbotAuthNode: FlowNodeTemplateType = {
       id: NodeOutputKeyEnum.httpRawResponse,
       key: NodeOutputKeyEnum.httpRawResponse,
       required: true,
-      label: i18nT('workflow:raw_response'),
-      description: i18nT('app:workflow.sqlbot_raw_response_description'),
+      label: '原始响应',
+      description: '接口原始响应内容',
       valueType: WorkflowIOValueTypeEnum.any,
       type: FlowNodeOutputTypeEnum.static
     }

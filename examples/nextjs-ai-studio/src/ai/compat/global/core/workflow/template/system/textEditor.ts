@@ -10,8 +10,6 @@ import {
   NodeInputKeyEnum,
   FlowNodeTemplateTypeEnum
 } from '../../constants';
-import { i18nT } from '../../../../../web/i18n/utils';
-
 export const TextEditorNode: FlowNodeTemplateType = {
   id: FlowNodeTypeEnum.textEditor,
   templateType: FlowNodeTemplateTypeEnum.tools,
@@ -21,8 +19,8 @@ export const TextEditorNode: FlowNodeTemplateType = {
   avatar: 'core/workflow/template/textConcat',
   avatarLinear: 'core/workflow/template/textConcatLinear',
   colorSchema: 'orange',
-  name: i18nT('workflow:text_concatenation'),
-  intro: i18nT('workflow:intro_text_concatenation'),
+  name: '文本拼接',
+  intro: '将多个文本或变量拼接为一段文本',
   courseUrl: '/docs/introduction/guide/dashboard/workflow/text_editor/',
   inputs: [
     {
@@ -30,15 +28,15 @@ export const TextEditorNode: FlowNodeTemplateType = {
       renderTypeList: [FlowNodeInputTypeEnum.textarea],
       valueType: WorkflowIOValueTypeEnum.string,
       required: true,
-      label: i18nT('workflow:concatenation_text'),
-      placeholder: i18nT('workflow:input_variable_list')
+      label: '拼接文本',
+      placeholder: '输入变量列表'
     }
   ],
   outputs: [
     {
       id: NodeOutputKeyEnum.text,
       key: NodeOutputKeyEnum.text,
-      label: i18nT('workflow:concatenation_result'),
+      label: '拼接结果',
       type: FlowNodeOutputTypeEnum.static,
       valueType: WorkflowIOValueTypeEnum.string
     }

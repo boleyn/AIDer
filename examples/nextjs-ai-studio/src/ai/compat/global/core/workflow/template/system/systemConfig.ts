@@ -1,7 +1,6 @@
 import { FlowNodeTypeEnum } from '../../node/constant';
 import { type FlowNodeTemplateType } from '../../type/node.d';
 import { FlowNodeTemplateTypeEnum } from '../../constants';
-import { i18nT } from '../../../../../web/i18n/utils';
 
 export const SystemConfigNode: FlowNodeTemplateType = {
   id: FlowNodeTypeEnum.systemConfig,
@@ -12,7 +11,7 @@ export const SystemConfigNode: FlowNodeTemplateType = {
   avatar: 'core/workflow/template/systemConfig',
   avatarLinear: 'core/workflow/template/systemConfigLinear',
   colorSchema: 'pink',
-  name: i18nT('workflow:template.system_config'),
+  name: '系统配置',
   intro: '',
   unique: true,
   forbidDelete: true,

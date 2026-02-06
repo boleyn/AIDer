@@ -1,7 +1,6 @@
 import { FlowNodeTypeEnum } from '../../node/constant';
 import { type FlowNodeTemplateType } from '../../type/node';
 import { FlowNodeTemplateTypeEnum } from '../../constants';
-import { i18nT } from '../../../../../web/i18n/utils';
 
 export const ToolParamsNode: FlowNodeTemplateType = {
   id: FlowNodeTypeEnum.toolParams,
@@ -12,8 +11,8 @@ export const ToolParamsNode: FlowNodeTemplateType = {
   avatar: 'core/workflow/template/toolParams',
   avatarLinear: 'core/workflow/template/toolParamsLinear',
   colorSchema: 'indigo',
-  name: i18nT('workflow:tool_custom_field'),
-  intro: i18nT('workflow:intro_tool_params_config'),
+  name: '工具参数',
+  intro: '配置工具的自定义参数',
   isTool: true,
   inputs: [],
   outputs: []

@@ -6,14 +6,13 @@ import {
   FlowNodeTemplateTypeEnum
 } from '../../constants';
 import { Input_Template_UserChatInput } from '../input';
-import { i18nT } from '../../../../../web/i18n/utils';
 import { type FlowNodeOutputItemType } from '../../type/io';
 
 export const userFilesInput: FlowNodeOutputItemType = {
   id: NodeOutputKeyEnum.userFiles,
   key: NodeOutputKeyEnum.userFiles,
-  label: i18nT('app:workflow.user_file_input'),
-  description: i18nT('app:workflow.user_file_input_desc'),
+  label: '用户文件',
+  description: '用户上传的文件列表',
   type: FlowNodeOutputTypeEnum.static,
   valueType: WorkflowIOValueTypeEnum.arrayString
 };
@@ -27,16 +26,16 @@ export const WorkflowStart: FlowNodeTemplateType = {
   avatar: 'core/workflow/template/workflowStart',
   avatarLinear: 'core/workflow/template/workflowStartLinear',
   colorSchema: 'blue',
-  name: i18nT('workflow:template.workflow_start'),
+  name: '工作流开始',
   intro: '',
   forbidDelete: true,
   unique: true,
-  inputs: [{ ...Input_Template_UserChatInput, toolDescription: i18nT('workflow:user_question') }],
+  inputs: [{ ...Input_Template_UserChatInput, toolDescription: '用户问题' }],
   outputs: [
     {
       id: NodeOutputKeyEnum.userChatInput,
       key: NodeOutputKeyEnum.userChatInput,
-      label: i18nT('common:core.module.input.label.user question'),
+      label: '用户问题',
       type: FlowNodeOutputTypeEnum.static,
       valueType: WorkflowIOValueTypeEnum.string
     }

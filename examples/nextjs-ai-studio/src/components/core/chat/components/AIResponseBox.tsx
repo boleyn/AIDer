@@ -1,5 +1,4 @@
 import Markdown from '@/components/Markdown';
-import ParagraphCard from './ParagraphCard';
 import WorkspaceCard, { type WorkspacePayload } from '@/components/Markdown/chat/WorkspaceCard';
 import {
   Accordion,
@@ -612,15 +611,13 @@ const AIResponseBox = ({
   value,
   isLastResponseValue,
   isChatting,
-  onOpenCiteModal,
-  onOpenParagraphEditor
+  onOpenCiteModal
 }: {
   chatItemDataId: string;
   value: UserChatItemValueItemType | AIChatItemValueItemType;
   isLastResponseValue: boolean;
   isChatting: boolean;
   onOpenCiteModal?: (e?: OnOpenCiteModalProps) => void;
-  onOpenParagraphEditor?: (dataId: string) => void;
 }) => {
   const chatId = useContextSelector(WorkflowRuntimeContext, (v) => v?.chatId);
   const outLinkAuthData = useContextSelector(WorkflowRuntimeContext, (v) => v?.outLinkAuthData);
@@ -677,17 +674,6 @@ const AIResponseBox = ({
     return <RenderTool showAnimation={isChatting} tools={value.tools} />;
   }
 
-  if (value.type === ChatItemValueTypeEnum.paragraph && value.paragraph) {
-    return (
-      <ParagraphCard
-        chatItemDataId={chatItemDataId}
-        paragraph={value.paragraph}
-        isLastResponseValue={isLastResponseValue}
-        isChatting={isChatting}
-        onOpenEditor={onOpenParagraphEditor || (() => {})}
-      />
-    );
-  }
   // 新增：流式大纲展示（当 value 为 outline 时即时渲染）
   if (value.type === ChatItemValueTypeEnum.outline && value.outline) {
     return (

@@ -18,7 +18,6 @@ import {
 } from '../input';
 import { Input_Template_File_Link } from '../input';
 import { LLMModelTypeEnum } from '../../../ai/constants';
-import { i18nT } from '../../../../../web/i18n/utils';
 import { Output_Template_Error_Message } from '../output';
 
 export const ToolCallNode: FlowNodeTemplateType = {
@@ -29,8 +28,8 @@ export const ToolCallNode: FlowNodeTemplateType = {
   showTargetHandle: true,
   avatar: 'core/workflow/template/toolCall',
   colorSchema: 'blue',
-  name: i18nT('workflow:tool_call_node'),
-  intro: i18nT('workflow:tool_call_node_intro'),
+  name: '工具调用',
+  intro: '调用外部工具并返回结果',
   showStatus: true,
   catchError: false,
   version: '1.0.0',
@@ -110,7 +109,7 @@ export const ToolCallNode: FlowNodeTemplateType = {
     {
       key: 'builtin_tools',
       label: '',
-      description: i18nT('workflow:tool_call_builtin_tools_desc'),
+      description: '内置工具列表',
       renderTypeList: [FlowNodeInputTypeEnum.custom],
       valueType: WorkflowIOValueTypeEnum.arrayString,
       required: false,
@@ -121,15 +120,15 @@ export const ToolCallNode: FlowNodeTemplateType = {
     {
       id: NodeOutputKeyEnum.answerText,
       key: NodeOutputKeyEnum.answerText,
-      label: i18nT('common:core.module.output.label.Ai response content'),
-      description: i18nT('common:core.module.output.description.Ai response content'),
+      label: 'AI 回复内容',
+      description: 'AI 生成的回复文本',
       valueType: WorkflowIOValueTypeEnum.string,
       type: FlowNodeOutputTypeEnum.static
     },
     {
       id: NodeOutputKeyEnum.selectedTools,
       key: NodeOutputKeyEnum.selectedTools,
-      label: i18nT('workflow:selected_tools'),
+      label: '已选工具',
       type: FlowNodeOutputTypeEnum.hidden,
       valueType: WorkflowIOValueTypeEnum.any
     },

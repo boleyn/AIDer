@@ -13,7 +13,6 @@ import {
 } from '../../input';
 import { Output_Template_Error_Message } from '../../output';
 import { LLMModelTypeEnum } from '../../../../ai/constants';
-import { i18nT } from '../../../../../../web/i18n/utils';
 
 export const TaskRecognizeModule: FlowNodeTemplateType = {
   id: FlowNodeTypeEnum.taskRecognize,
@@ -23,9 +22,9 @@ export const TaskRecognizeModule: FlowNodeTemplateType = {
   showTargetHandle: true,
   avatar: 'core/workflow/template/taskRecognize',
   colorSchema: 'yellow',
-  name: i18nT('workflow:task_recognize'),
-  intro: i18nT('workflow:intro_task_recognize'),
-  toolDescription: i18nT('workflow:intro_task_recognize'),
+  name: '任务识别',
+  intro: '识别用户输入是否为可执行任务',
+  toolDescription: '识别用户输入是否为可执行任务',
   showStatus: true,
   isTool: true,
   catchError: true,
@@ -44,7 +43,7 @@ export const TaskRecognizeModule: FlowNodeTemplateType = {
       id: NodeOutputKeyEnum.taskIsTask,
       key: NodeOutputKeyEnum.taskIsTask,
       required: true,
-      label: i18nT('workflow:task_recognize_is_task'),
+      label: '是否为任务',
       valueType: WorkflowIOValueTypeEnum.boolean,
       type: FlowNodeOutputTypeEnum.source
     },
@@ -52,7 +51,7 @@ export const TaskRecognizeModule: FlowNodeTemplateType = {
       id: NodeOutputKeyEnum.taskData,
       key: NodeOutputKeyEnum.taskData,
       required: false,
-      label: i18nT('workflow:task_recognize_task_data'),
+      label: '任务数据',
       valueType: WorkflowIOValueTypeEnum.object,
       type: FlowNodeOutputTypeEnum.source
     },

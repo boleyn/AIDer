@@ -1,12 +1,5 @@
 import { fetchEventSource, EventStreamContentType } from "@fortaine/fetch-event-source";
-
-export const SseResponseEventEnum = {
-  answer: "answer",
-  toolCall: "toolCall",
-  toolParams: "toolParams",
-  toolResponse: "toolResponse",
-  error: "error",
-} as const;
+import { SseResponseEventEnum } from "@shared/network/sseEvents";
 
 export type SseEventName = typeof SseResponseEventEnum[keyof typeof SseResponseEventEnum];
 
@@ -19,7 +12,9 @@ export type StreamQueueItem =
       event:
         | typeof SseResponseEventEnum.toolCall
         | typeof SseResponseEventEnum.toolParams
-        | typeof SseResponseEventEnum.toolResponse;
+        | typeof SseResponseEventEnum.toolResponse
+        | typeof SseResponseEventEnum.flowNodeResponse
+        | typeof SseResponseEventEnum.workflowDuration;
       [key: string]: any;
     }
   | {
@@ -130,7 +125,9 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl }: StreamFetchProp
           } else if (
             event === SseResponseEventEnum.toolCall ||
             event === SseResponseEventEnum.toolParams ||
-            event === SseResponseEventEnum.toolResponse
+            event === SseResponseEventEnum.toolResponse ||
+            event === SseResponseEventEnum.flowNodeResponse ||
+            event === SseResponseEventEnum.workflowDuration
           ) {
             if (typeof parseJson === "object") {
               pushDataToQueue({ event: event as any, ...parseJson });
