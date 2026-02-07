@@ -1,6 +1,6 @@
 import type { Conversation, ConversationMessage, ConversationSummary } from "@/types/conversation";
 
-export type ChatHistoryItemType = {
+export interface ChatHistoryItemType {
   id?: string;
   chatId?: string;
   title?: string;
@@ -10,9 +10,9 @@ export type ChatHistoryItemType = {
   createTime?: string;
   updateTime?: string;
   top?: boolean;
-};
+}
 
-export type GetHistoriesBodyType = {
+export interface GetHistoriesBodyType {
   token?: string;
   appId?: string;
   shareId?: string;
@@ -24,14 +24,14 @@ export type GetHistoriesBodyType = {
   endCreateTime?: string;
   startUpdateTime?: string;
   endUpdateTime?: string;
-};
+}
 
-export type GetHistoriesResponseType = {
+export interface GetHistoriesResponseType {
   list: ChatHistoryItemType[];
   total: number;
-};
+}
 
-export type UpdateHistoryBodyType = {
+export interface UpdateHistoryBodyType {
   token?: string;
   appId?: string;
   shareId?: string;
@@ -43,13 +43,13 @@ export type UpdateHistoryBodyType = {
   customTitle?: string;
   top?: boolean;
   messages?: ConversationMessage[];
-};
+}
 
-export type UpdateHistoryResponseType = {
+export interface UpdateHistoryResponseType {
   history?: Conversation;
-};
+}
 
-export type DelChatHistoryType = {
+export interface DelChatHistoryType {
   token?: string;
   appId?: string;
   shareId?: string;
@@ -57,38 +57,38 @@ export type DelChatHistoryType = {
   teamId?: string;
   teamToken?: string;
   chatId: string;
-};
+}
 
-export type ClearChatHistoriesType = {
+export interface ClearChatHistoriesType {
   token?: string;
   appId?: string;
   shareId?: string;
   outLinkUid?: string;
   teamId?: string;
   teamToken?: string;
-};
+}
 
-export type ClearChatHistoriesResponseType = {
+export interface ClearChatHistoriesResponseType {
   deletedCount?: number;
-};
+}
 
-export type ChatBatchDeleteBodyType = {
+export interface ChatBatchDeleteBodyType {
   token?: string;
   appId?: string;
   chatIds: string[];
-};
+}
 
-export type InitChatQueryType = {
+export interface InitChatQueryType {
   token: string;
   chatId: string;
-};
+}
 
-export type InitChatResponseType = {
+export interface InitChatResponseType {
   chatId?: string;
   title?: string;
-};
+}
 
-export type GetChatRecordsV2BodyType = {
+export interface GetChatRecordsV2BodyType {
   token: string;
   chatId: string;
   pageSize?: number;
@@ -96,13 +96,13 @@ export type GetChatRecordsV2BodyType = {
   prevId?: string;
   nextId?: string;
   includeDeleted?: boolean;
-};
+}
 
-export type GetChatRecordsV2ResponseType = {
+export interface GetChatRecordsV2ResponseType {
   list?: ConversationMessage[];
   total?: number;
   hasMorePrev?: boolean;
   hasMoreNext?: boolean;
-};
+}
 
 export type ConversationListResult = ConversationSummary[];

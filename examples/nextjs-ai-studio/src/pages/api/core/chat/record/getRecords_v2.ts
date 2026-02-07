@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 
 import { requireAuth } from "@server/auth/session";
 import { getConversationRecordsV2 } from "@server/conversations/conversationStorage";
+import type { NextApiRequest, NextApiResponse } from "next";
 
 const getToken = (req: NextApiRequest): string | null => {
   const queryToken = typeof req.query.token === "string" ? req.query.token : null;

@@ -1,5 +1,6 @@
-import type { Conversation, ConversationMessage, ConversationSummary } from "@/types/conversation";
 import { createId } from "@shared/chat/messages";
+
+import type { ChatHistoryItemType } from "../types/conversationApi";
 
 import {
   clearConversationHistories,
@@ -9,7 +10,8 @@ import {
   getConversationRecordsV2,
   putConversationHistory,
 } from "./conversationApi";
-import type { ChatHistoryItemType } from "../types/conversationApi";
+
+import type { Conversation, ConversationMessage, ConversationSummary } from "@/types/conversation";
 
 const HISTORY_TITLE = "历史记录";
 

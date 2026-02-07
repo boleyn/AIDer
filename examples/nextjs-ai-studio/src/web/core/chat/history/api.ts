@@ -1,4 +1,3 @@
-import { POST, PUT, DELETE } from '@/web/common/api/request';
 import type {
   ChatBatchDeleteBodyType,
   ClearChatHistoriesResponseType,
@@ -9,6 +8,7 @@ import type {
   UpdateHistoryBodyType,
   UpdateHistoryResponseType
 } from '@/features/chat/types/conversationApi';
+import { POST, PUT, DELETE } from '@/web/common/api/request';
 
 export const getChatHistories = (data: GetHistoriesBodyType) =>
   POST<GetHistoriesResponseType>('/core/chat/history/getHistories', data);
