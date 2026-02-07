@@ -28,9 +28,10 @@ type StreamFetchProps = {
   data: Record<string, any>;
   onMessage: (item: StreamQueueItem) => void;
   abortCtrl: AbortController;
+  headers?: HeadersInit;
 };
 
-export const streamFetch = ({ url, data, onMessage, abortCtrl }: StreamFetchProps) =>
+export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: StreamFetchProps) =>
   new Promise<{ responseText: string }>(async (resolve, reject) => {
     const timeoutId = setTimeout(() => {
       abortCtrl.abort("Time out");
@@ -90,7 +91,7 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl }: StreamFetchProp
     try {
       await fetchEventSource(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(headers || {}) },
         signal: abortCtrl.signal,
         body: JSON.stringify(data),
         async onopen(res) {

@@ -1,4 +1,5 @@
 import {
+  Box,
   Flex,
   IconButton,
   Menu,
@@ -8,7 +9,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 
-import { AddIcon, ClockIcon, CloseIcon, SettingsIcon } from "@/components/common/Icon";
+import { AddIcon, ClockIcon, CloseIcon } from "@/components/common/Icon";
 import type { ConversationSummary } from "@/types/conversation";
 
 interface ChatHeaderProps {
@@ -28,10 +29,6 @@ interface ChatHeaderProps {
 
 const ChatHeader = ({
   title,
-  model,
-  modelOptions = [],
-  modelLoading,
-  onChangeModel,
   conversations = [],
   activeConversationId,
   onSelectConversation,
@@ -43,64 +40,47 @@ const ChatHeader = ({
   return (
     <Flex
       align="center"
-      bg="white"
-      borderBottom="1px solid"
-      borderColor="gray.200"
       justify="space-between"
       px={4}
       py={3}
+      borderBottom="1px solid"
+      borderColor="rgba(226,232,240,0.95)"
+      bg="linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(248,250,252,0.7) 100%)"
+      flexShrink={0}
     >
-      <Text color="gray.700" fontSize="sm" fontWeight="600">
-        {title || "Code assistant"}
-      </Text>
+      <Box minW={0}>
+        <Text color="myGray.800" fontSize="sm" fontWeight="800" isTruncated maxW="230px">
+          {title || "Code Assistant"}
+        </Text>
+        <Text color="myGray.500" fontSize="xs" mt={0.5}>
+          会话数 {conversations.length}
+        </Text>
+      </Box>
+
       <Flex gap={1}>
-        <Menu placement="bottom-end">
-          <MenuButton
-            aria-label="Model selector"
-            as={IconButton}
-            icon={<Text fontSize="xs">{model || "模型"}</Text>}
-            isDisabled={modelLoading || modelOptions.length === 0}
-            size="xs"
-            variant="ghost"
-          />
-          <MenuList maxH="260px" minW="220px" overflowY="auto">
-            {modelOptions.length === 0 ? (
-              <MenuItem isDisabled>{modelLoading ? "加载模型中..." : "暂无可用模型"}</MenuItem>
-            ) : (
-              modelOptions.map((item) => (
-                <MenuItem
-                  key={item.value}
-                  fontWeight={item.value === model ? "600" : "400"}
-                  onClick={() => onChangeModel?.(item.value)}
-                >
-                  {item.label}
-                </MenuItem>
-              ))
-            )}
-          </MenuList>
-        </Menu>
         <Menu placement="bottom-end">
           <MenuButton
             aria-label="Chat history"
             as={IconButton}
             icon={<ClockIcon />}
-            size="xs"
+            size="sm"
             variant="ghost"
+            borderRadius="10px"
+            _hover={{ bg: "myGray.100" }}
           />
-          <MenuList maxH="320px" minW="240px" overflowY="auto">
+          <MenuList maxH="320px" minW="260px" overflowY="auto" borderColor="myGray.200" p={1}>
             {conversations.length === 0 ? (
-              <MenuItem isDisabled>暂无历史对话</MenuItem>
+              <MenuItem isDisabled borderRadius="md">暂无历史对话</MenuItem>
             ) : (
               conversations.map((conversation) => (
                 <MenuItem
                   key={conversation.id}
-                  fontWeight={
-                    conversation.id === activeConversationId ? "600" : "400"
-                  }
+                  borderRadius="md"
+                  bg={conversation.id === activeConversationId ? "blue.50" : "transparent"}
                   onClick={() => onSelectConversation?.(conversation.id)}
                 >
                   <Flex align="center" gap={2} justify="space-between" w="full">
-                    <Text maxW="180px" isTruncated>
+                    <Text maxW="184px" isTruncated fontWeight={conversation.id === activeConversationId ? "700" : "500"}>
                       {conversation.title || "未命名对话"}
                     </Text>
                     <IconButton
@@ -123,7 +103,8 @@ const ChatHeader = ({
             {conversations.length > 0 && (
               <MenuItem
                 color="red.500"
-                fontWeight="600"
+                fontWeight="700"
+                borderRadius="md"
                 onClick={() => {
                   if (window.confirm("确定要清空所有历史记录吗？")) {
                     onDeleteAllConversations?.();
@@ -135,18 +116,17 @@ const ChatHeader = ({
             )}
           </MenuList>
         </Menu>
-        <IconButton
-          aria-label="Chat settings"
-          icon={<SettingsIcon />}
-          size="xs"
-          variant="ghost"
-        />
+
         <IconButton
           aria-label="New chat"
           icon={<AddIcon />}
           onClick={onNewConversation ?? onReset}
-          size="xs"
-          variant="ghost"
+          size="sm"
+          borderRadius="10px"
+          bg="white"
+          border="1px solid"
+          borderColor="myGray.200"
+          _hover={{ bg: "myGray.100" }}
         />
       </Flex>
     </Flex>

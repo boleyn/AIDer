@@ -399,10 +399,25 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
               />
             </Box>
             <Box
-              w="6px"
+              w="10px"
               cursor="col-resize"
               bg="transparent"
-              _hover={{ bg: "rgba(148, 163, 184, 0.4)" }}
+              position="relative"
+              _before={{
+                content: '""',
+                position: "absolute",
+                left: "50%",
+                top: "20%",
+                transform: "translateX(-50%)",
+                width: "2px",
+                height: "60%",
+                borderRadius: "999px",
+                background: "rgba(148,163,184,0.35)",
+              }}
+              _hover={{
+                bg: "rgba(148,163,184,0.12)",
+                _before: { background: "rgba(71,85,105,0.5)" },
+              }}
               onMouseDown={() => {
                 resizingRef.current = true;
               }}

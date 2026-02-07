@@ -57,14 +57,14 @@ const WorkspaceShell = ({
       direction="column"
       flex="1"
       minH="0"
-      border="1px solid rgba(255,255,255,0.7)"
+      border="1px solid rgba(255,255,255,0.75)"
       borderTopLeftRadius={0}
       borderBottomLeftRadius={0}
       borderTopRightRadius="2xl"
       borderBottomRightRadius="2xl"
-      bg="rgba(255,255,255,0.7)"
-      backdropFilter="blur(20px)"
-      boxShadow="0 18px 40px -24px rgba(15, 23, 42, 0.25)"
+      bg="rgba(255,255,255,0.75)"
+      backdropFilter="blur(22px)"
+      boxShadow="0 24px 42px -28px rgba(15, 23, 42, 0.35)"
       overflow="hidden"
     >
       <Flex direction="column" flex="1" minH="0" h="100%">
@@ -84,6 +84,7 @@ const WorkspaceShell = ({
           height={contentHeight}
           minHeight={contentHeight}
           overflow="hidden"
+          bg="rgba(248,250,252,0.65)"
         >
           <SandpackLayout
             style={{
@@ -112,7 +113,13 @@ const WorkspaceShell = ({
                   wrapContent
                   style={{ flex: 1, minHeight: 0 }}
                 />
-                <SandpackConsole style={{ maxHeight: "35%", overflow: "auto" }} />
+                <SandpackConsole
+                  style={{
+                    maxHeight: "35%",
+                    overflow: "auto",
+                    borderTop: "1px solid rgba(203,213,225,0.85)",
+                  }}
+                />
               </SandpackStack>
             </Box>
           </SandpackLayout>

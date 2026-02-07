@@ -48,8 +48,13 @@ const toIncomingMessages = (messages: unknown): IncomingMessage[] => {
       const record = message as {
         role?: string;
         content?: unknown;
+        id?: string;
         name?: string;
         tool_call_id?: string;
+        tool_calls?: IncomingMessage["tool_calls"];
+        additional_kwargs?: IncomingMessage["additional_kwargs"];
+        status?: IncomingMessage["status"];
+        artifact?: IncomingMessage["artifact"];
       };
       if (!record.role) return null;
       const role = record.role;
@@ -59,8 +64,13 @@ const toIncomingMessages = (messages: unknown): IncomingMessage[] => {
       return {
         role,
         content: record.content ?? "",
+        id: record.id,
         name: record.name,
         tool_call_id: record.tool_call_id,
+        tool_calls: record.tool_calls,
+        additional_kwargs: record.additional_kwargs,
+        status: record.status,
+        artifact: record.artifact,
       } as IncomingMessage;
     })
     .filter((message): message is IncomingMessage => Boolean(message));
@@ -225,6 +235,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     name: message.name,
     tool_call_id: message.tool_call_id,
     tool_calls: message.tool_calls,
+    additional_kwargs: message.additional_kwargs,
+    status: message.status,
+    artifact: message.artifact,
   }));
   const contextMessages = [...historyMessages, ...newMessages];
 
@@ -335,13 +348,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }));
 
   const toAgentMessages = (messages: ConversationMessage[]): ChatCompletionMessageParam[] =>
-    messages.map((message) => ({
-      role: message.role,
-      content: extractText(message.content),
-      name: message.name,
-      tool_call_id: message.tool_call_id,
-      tool_calls: message.tool_calls,
-    })) as ChatCompletionMessageParam[];
+    messages.map((message) => {
+      const baseText = extractText(message.content);
+      const filePrompt =
+        message.role === "user" &&
+        message.additional_kwargs &&
+        typeof message.additional_kwargs.filePrompt === "string"
+          ? message.additional_kwargs.filePrompt
+          : "";
+
+      const content = filePrompt
+        ? [baseText, "以下为用户附加文件内容:", filePrompt].filter(Boolean).join("\n\n")
+        : baseText;
+
+      return {
+        role: message.role,
+        content,
+        name: message.name,
+        tool_call_id: message.tool_call_id,
+        tool_calls: message.tool_calls,
+      };
+    }) as ChatCompletionMessageParam[];
 
   if (stream) {
     startSse(res);

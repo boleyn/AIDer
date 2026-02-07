@@ -1,19 +1,21 @@
 import { POST, PUT, DELETE } from '@/web/common/api/request';
 import type {
   ChatBatchDeleteBodyType,
+  ClearChatHistoriesResponseType,
   DelChatHistoryType,
   ClearChatHistoriesType,
   GetHistoriesBodyType,
   GetHistoriesResponseType,
-  UpdateHistoryBodyType
-} from '@fastgpt/global/openapi/core/chat/history/api';
+  UpdateHistoryBodyType,
+  UpdateHistoryResponseType
+} from '@/features/chat/types/conversationApi';
 
 export const getChatHistories = (data: GetHistoriesBodyType) =>
   POST<GetHistoriesResponseType>('/core/chat/history/getHistories', data);
 
 // 修改历史记录: 标题/置顶
 export const putChatHistory = (data: UpdateHistoryBodyType) =>
-  PUT('/core/chat/history/updateHistory', data);
+  PUT<UpdateHistoryResponseType>('/core/chat/history/updateHistory', data);
 
 // delete one history (soft delete)
 export const delChatHistoryById = (data: DelChatHistoryType) =>
@@ -21,7 +23,7 @@ export const delChatHistoryById = (data: DelChatHistoryType) =>
 
 // clear all history by appId
 export const delClearChatHistories = (data: ClearChatHistoriesType) =>
-  DELETE(`/core/chat/history/clearHistories`, data);
+  DELETE<ClearChatHistoriesResponseType>(`/core/chat/history/clearHistories`, data);
 
 // 统一入口：清空 Entry 维度会话历史
 export const delEntryClearChatHistories = (data: {
