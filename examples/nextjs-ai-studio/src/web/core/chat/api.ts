@@ -1,41 +1,35 @@
-import { GET, POST, DELETE, PUT } from '@/web/common/api/request';
 import type { ChatHistoryItemResType } from '@fastgpt/global/core/chat/type.d';
-import type { getResDataQuery } from '@/pages/api/core/chat/record/getResData';
+import type { GetRecentlyUsedAppsResponseType } from '@fastgpt/global/openapi/core/chat/api';
+import type {
+  InitChatQueryType
+} from '@fastgpt/global/openapi/core/chat/controler/api';
+
+import type {
+  ClearChatHistoriesType as ClearHistoriesProps,
+  DelChatHistoryType as DelHistoryProps,
+  StopConversationBodyType as StopV2ChatParams,
+} from '@/features/chat/types/conversationApi';
 import type {
   InitChatResponse,
   InitOutLinkChatProps,
   InitTeamChatProps
 } from '@/global/core/chat/api.d';
-
 import type { DeleteChatItemProps } from '@/global/core/chat/api.d';
-import type {
-  DelChatHistoryType as DelHistoryProps,
-  ClearChatHistoriesType as ClearHistoriesProps
-} from '@fastgpt/global/openapi/core/chat/history/api';
-import type {
-  getChatRecordsBody,
-  getChatRecordsResponse
-} from '@/pages/api/core/chat/record/getRecords_v2';
-import type {
-  getPaginationRecordsBody,
-  getPaginationRecordsResponse
-} from '@/pages/api/entries/chat/getPaginationRecords';
-import type { GetQuoteProps, GetQuotesRes } from '@/pages/api/core/chat/quote/getQuote';
 import type {
   GetCollectionQuoteProps,
   GetCollectionQuoteRes
 } from '@/pages/api/core/chat/quote/getCollectionQuote';
-import type { ChatSettingModelType, ChatSettingType } from '@fastgpt/global/core/chat/setting/type';
+import type { GetQuoteProps, GetQuotesRes } from '@/pages/api/core/chat/quote/getQuote';
 import type {
-  GetChatFavouriteListParamsType,
-  UpdateFavouriteAppParamsType
-} from '@fastgpt/global/openapi/core/chat/favourite/api';
-import type { ChatFavouriteAppType } from '@fastgpt/global/core/chat/favouriteApp/type';
+  getChatRecordsBody,
+  getChatRecordsResponse
+} from '@/pages/api/core/chat/record/getRecords_v2';
+import type { getResDataQuery } from '@/pages/api/core/chat/record/getResData';
 import type {
-  InitChatQueryType,
-  StopV2ChatParams
-} from '@fastgpt/global/openapi/core/chat/controler/api';
-import type { GetRecentlyUsedAppsResponseType } from '@fastgpt/global/openapi/core/chat/api';
+  getPaginationRecordsBody,
+  getPaginationRecordsResponse
+} from '@/pages/api/entries/chat/getPaginationRecords';
+import { GET, POST, DELETE, PUT } from '@/web/common/api/request';
 
 export const getRecentlyUsedApps = () =>
   GET<GetRecentlyUsedAppsResponseType>('/core/chat/recentlyUsed', undefined, { maxQuantity: 1 });
@@ -68,7 +62,7 @@ export const getEntryChatRecords = (
  * 注意：全局 GET 会返回后端 data 字段的解包结果，这里直接声明为内层数据类型即可。
  */
 export const getEntryShareAppInit = (params: { appId: string; shareId: string }) =>
-  GET<{ variables: any; app: { chatConfig: any } }>(`/entries/app/init`, params);
+  GET<{ variables: Record<string, unknown>; app: { chatConfig: unknown } }>(`/entries/app/init`, params);
 
 /**
  * delete one history
@@ -118,7 +112,7 @@ export const updateParagraphDocument = (data: {
   chatItemDataId: string;
   markdown: string;
   title?: string;
-  sources?: { id: number; title: string; url: string }[];
+  sources?: Array<{ id: number; title: string; url: string }>;
   shareId?: string;
   outLinkUid?: string;
 }) =>
@@ -141,27 +135,6 @@ export const updateInstructionStatus = (data: {
   shareId?: string;
   outLinkUid?: string;
 }) => PUT('/core/chat/item/updateInstructionStatus', data);
-
-/*---------- chat setting ------------*/
-export const getChatSetting = () => GET<ChatSettingType>('/proApi/core/chat/setting/detail');
-
-export const updateChatSetting = (data: Partial<ChatSettingModelType>) =>
-  POST<Partial<ChatSettingType>>('/proApi/core/chat/setting/update', data);
-
-export const getFavouriteApps = (data?: GetChatFavouriteListParamsType) =>
-  GET<ChatFavouriteAppType[]>('/proApi/core/chat/setting/favourite/list', data);
-
-export const updateFavouriteApps = (data: UpdateFavouriteAppParamsType[]) =>
-  POST<ChatFavouriteAppType[]>('/proApi/core/chat/setting/favourite/update', data);
-
-export const updateFavouriteAppOrder = (data: { id: string; order: number }[]) =>
-  PUT<null>('/proApi/core/chat/setting/favourite/order', data);
-
-export const updateFavouriteAppTags = (data: { id: string; tags: string[] }[]) =>
-  PUT<null>('/proApi/core/chat/setting/favourite/tags', data);
-
-export const deleteFavouriteApp = (data: { id: string }) =>
-  DELETE<null>('/proApi/core/chat/setting/favourite/delete', data);
 
 /* Chat controller */
 export const postStopV2Chat = (data: StopV2ChatParams) => POST('/v2/chat/stop', data);

@@ -29,6 +29,7 @@ const ChatInput = ({
   modelOptions,
   modelLoading,
   onChangeModel,
+  onStop,
   onSend,
 }: ChatInputProps) => {
   const [text, setText] = useState("");
@@ -67,25 +68,25 @@ const ChatInput = ({
 
   return (
     <Flex
+      bg="rgba(255,255,255,0.9)"
+      borderTop="1px solid rgba(226,232,240,0.9)"
       direction="column"
       gap={3}
       px={4}
       py={3}
-      bg="rgba(255,255,255,0.9)"
-      borderTop="1px solid rgba(226,232,240,0.9)"
     >
-      <Flex align="center" justify="space-between" gap={2}>
-        <Text fontSize="xs" color="myGray.500" fontWeight="600" letterSpacing="0.02em">
+      <Flex align="center" gap={2} justify="space-between">
+        <Text color="myGray.500" fontSize="xs" fontWeight="600" letterSpacing="0.02em">
           当前模型
         </Text>
         <Select
-          size="sm"
-          maxW="220px"
-          value={model}
-          onChange={(event) => onChangeModel(event.target.value)}
-          isDisabled={modelLoading || isSending || modelOptions.length === 0}
           bg="white"
           borderColor="myGray.250"
+          isDisabled={modelLoading || isSending || modelOptions.length === 0}
+          maxW="220px"
+          onChange={(event) => onChangeModel(event.target.value)}
+          size="sm"
+          value={model}
         >
           {modelOptions.length === 0 ? (
             <option value="agent">{modelLoading ? "加载模型中..." : "暂无可用模型"}</option>
@@ -101,16 +102,16 @@ const ChatInput = ({
 
       {files.length > 0 ? (
         <Box
+          bg="white"
           border="1px solid"
           borderColor="myGray.200"
           borderRadius="md"
-          bg="white"
           px={2}
           py={2}
         >
-          <Flex wrap="wrap" gap={2}>
+          <Flex gap={2} wrap="wrap">
             {files.map((item) => (
-              <Tag key={item.id} size="sm" borderRadius="full" variant="subtle" colorScheme="blue">
+              <Tag key={item.id} borderRadius="full" colorScheme="blue" size="sm" variant="subtle">
                 <TagLabel maxW="210px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
                   {item.file.name} ({formatFileSize(item.file.size)})
                 </TagLabel>
@@ -125,8 +126,14 @@ const ChatInput = ({
         </Box>
       ) : null}
 
-      <Flex gap={2} align="flex-end">
+      <Flex align="flex-end" gap={2}>
         <Textarea
+          _focusVisible={{
+            borderColor: "primary.400",
+            boxShadow: "0 0 0 1px rgba(51,112,255,0.35)",
+          }}
+          bg="white"
+          borderColor="myGray.250"
           isDisabled={isSending}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -136,48 +143,52 @@ const ChatInput = ({
             }
           }}
           placeholder="输入你的问题，按 Enter 发送，Shift + Enter 换行"
-          value={text}
-          rows={2}
           resize="none"
-          bg="white"
-          borderColor="myGray.250"
-          _focusVisible={{
-            borderColor: "primary.400",
-            boxShadow: "0 0 0 1px rgba(51,112,255,0.35)",
-          }}
+          rows={2}
+          value={text}
         />
 
         <Flex direction="column" gap={2}>
           <Input
             ref={fileInputRef}
-            type="file"
-            multiple
             display="none"
             onChange={(event) => onPickFiles(event.target.files)}
+            type="file"
+            multiple
           />
           <IconButton
             aria-label="选择文件"
-            icon={<Text fontSize="lg" lineHeight="1">+</Text>}
-            h="42px"
-            minW="42px"
-            variant="outline"
             borderColor="myGray.250"
-            onClick={() => fileInputRef.current?.click()}
+            h="42px"
+            icon={<Text fontSize="lg" lineHeight="1">+</Text>}
             isDisabled={isSending}
+            minW="42px"
+            onClick={() => fileInputRef.current?.click()}
+            variant="outline"
           />
           <Button
-            isLoading={isSending}
-            onClick={handleSend}
-            h="42px"
-            minW="74px"
-            color="white"
-            bgGradient="linear(to-r, blue.500, cyan.500)"
-            _hover={{ filter: "brightness(1.06)" }}
             _active={{ filter: "brightness(0.98)" }}
+            _hover={{ filter: "brightness(1.06)" }}
+            bgGradient="linear(to-r, blue.500, cyan.500)"
+            color="white"
+            h="42px"
             isDisabled={!canSend}
+            isLoading={isSending}
+            minW="74px"
+            onClick={handleSend}
           >
             发送
           </Button>
+          {isSending ? (
+            <Button
+              h="42px"
+              minW="74px"
+              onClick={onStop}
+              variant="outline"
+            >
+              停止
+            </Button>
+          ) : null}
         </Flex>
       </Flex>
     </Flex>

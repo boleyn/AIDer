@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { NextRouter } from "next/router";
-import type { Conversation, ConversationSummary } from "@/types/conversation";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+
 import {
   createConversation,
   deleteConversation as deleteConversationRequest,
@@ -9,6 +10,8 @@ import {
   listConversations,
 } from "../services/conversations";
 import { INITIAL_ASSISTANT_MESSAGE } from "../utils/constants";
+
+import type { Conversation, ConversationSummary } from "@/types/conversation";
 
 const createId = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -24,7 +27,7 @@ const conversationListCache = new Map<
 >();
 const conversationListRequests = new Map<string, Promise<ConversationSummary[]>>();
 
-export type UseConversationsResult = {
+export interface UseConversationsResult {
   conversations: ConversationSummary[];
   activeConversation: Conversation | null;
   isLoadingConversation: boolean;
@@ -36,7 +39,7 @@ export type UseConversationsResult = {
   deleteConversation: (id: string) => Promise<void>;
   deleteAllConversations: () => Promise<void>;
   setActiveConversation: (conversation: Conversation | null) => void;
-};
+}
 
 export function useConversations(token: string, router: NextRouter): UseConversationsResult {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);

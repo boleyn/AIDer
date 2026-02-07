@@ -1,7 +1,13 @@
+import { type BoxProps, useDisclosure } from '@chakra-ui/react';
+import { getNanoid } from '@fastgpt/global/common/string/tools';
+import { type ChatHistoryItemType } from '@fastgpt/global/core/chat/type';
 import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useScrollPagination } from '@fastgpt/web/hooks/useScrollPagination';
 import { useRouter } from 'next/router';
 import React, { type ReactNode, useCallback, useMemo, useRef } from 'react';
 import { createContext } from 'use-context-selector';
+
+
 import {
   delClearChatHistories,
   delEntryClearChatHistories,
@@ -9,19 +15,18 @@ import {
   putChatHistory,
   getChatHistories
 } from '../history/api';
-import { type ChatHistoryItemType } from '@fastgpt/global/core/chat/type';
-import { type BoxProps, useDisclosure } from '@chakra-ui/react';
+
 import { useChatStore } from './useChatStore';
-import { getNanoid } from '@fastgpt/global/common/string/tools';
-import { useScrollPagination } from '@fastgpt/web/hooks/useScrollPagination';
-import type { UpdateHistoryBodyType } from '@fastgpt/global/openapi/core/chat/history/api';
+
+import type { UpdateHistoryBodyType } from '@/features/chat/types/conversationApi';
+
 
 type UpdateHistoryParams = Pick<UpdateHistoryBodyType, 'chatId' | 'customTitle' | 'top'>;
 
-type ChatContextValueType = {
+interface ChatContextValueType {
   params: Record<string, string | number | boolean>;
-};
-type ChatContextType = {
+}
+interface ChatContextType {
   onUpdateHistory: (data: UpdateHistoryParams) => void;
   onDelHistory: (chatId: string) => Promise<undefined>;
   onClearHistories: () => Promise<undefined>;
@@ -46,7 +51,7 @@ type ChatContextType = {
   isLoading: boolean;
   histories: ChatHistoryItemType[];
   onUpdateHistoryTitle: ({ chatId, newTitle }: { chatId: string; newTitle: string }) => void;
-};
+}
 
 /* 
   主要存放历史记录数据。
@@ -200,14 +205,14 @@ const ChatContextProvider = ({
       if (isEntryContext) {
         return delEntryClearChatHistories({
           entryId: appId,
-          shareId: (outLinkAuthData as any)?.shareId,
-          outLinkUid: (outLinkAuthData as any)?.outLinkUid
-        }) as any;
+          shareId: outLinkAuthData?.shareId,
+          outLinkUid: outLinkAuthData?.outLinkUid
+        });
       }
       return delClearChatHistories({
         appId: appId,
         ...outLinkAuthData
-      }) as any;
+      });
     },
     {
       refreshDeps: [outLinkAuthData, appId],
@@ -221,7 +226,7 @@ const ChatContextProvider = ({
   );
 
   const onClearHistories = useCallback((): Promise<undefined> => {
-    return (runClearHistories() as unknown as Promise<any>).then(() => undefined);
+    return runClearHistories().then(() => undefined);
   }, [runClearHistories]);
 
   const onUpdateHistoryTitle = useCallback(

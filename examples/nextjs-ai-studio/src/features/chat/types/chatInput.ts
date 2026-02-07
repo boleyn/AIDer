@@ -19,5 +19,6 @@ export interface ChatInputProps {
   modelOptions: ChatInputModelOption[];
   modelLoading?: boolean;
   onChangeModel: (model: string) => void;
+  onStop?: () => void;
   onSend: (payload: ChatInputSubmitPayload) => Promise<void> | void;
 }

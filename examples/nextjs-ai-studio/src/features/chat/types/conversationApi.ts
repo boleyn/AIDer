@@ -105,4 +105,14 @@ export interface GetChatRecordsV2ResponseType {
   hasMoreNext?: boolean;
 }
 
+export interface StopConversationBodyType {
+  token: string;
+  chatId: string;
+}
+
+export interface StopConversationResponseType {
+  success: boolean;
+  stopped: boolean;
+}
+
 export type ConversationListResult = ConversationSummary[];

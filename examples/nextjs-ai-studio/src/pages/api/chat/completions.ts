@@ -7,6 +7,10 @@ import { createProjectTools } from "@server/agent/tools";
 import { runSimpleAgentWorkflow } from "@server/agent/workflow/simpleAgentWorkflow";
 import { requireAuth } from "@server/auth/session";
 import {
+  registerActiveConversationRun,
+  unregisterActiveConversationRun,
+} from "@server/chat/activeRuns";
+import {
   getConversation,
   appendConversationMessages,
   replaceConversationMessages,
@@ -375,27 +379,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const workflowStartAt = Date.now();
-  const { runResult, finalMessage, flowResponses } = await runSimpleAgentWorkflow({
-    selectedModel,
-    stream,
-    recursionLimit: runtimeConfig.recursionLimit || 6,
-    temperature: runtimeConfig.temperature,
-    messages: toAgentMessages(contextMessages),
-    allTools,
-    tools,
-    onEvent: (event, data) => {
-      if (!stream) return;
+  const workflowAbortController = new AbortController();
+  if (conversationId) {
+    registerActiveConversationRun({
+      token,
+      chatId: conversationId,
+      controller: workflowAbortController,
+    });
+  }
 
-      if (event === SseResponseEventEnum.answer) {
-        const text = typeof data.text === "string" ? data.text : "";
-        if (!text) return;
-        emitAnswerChunk(text);
-        return;
+  const { runResult, finalMessage, flowResponses } = await (async () => {
+    try {
+      return await runSimpleAgentWorkflow({
+        selectedModel,
+        stream,
+        recursionLimit: runtimeConfig.recursionLimit || 6,
+        temperature: runtimeConfig.temperature,
+        messages: toAgentMessages(contextMessages),
+        allTools,
+        tools,
+        abortSignal: workflowAbortController.signal,
+        onEvent: (event, data) => {
+          if (!stream) return;
+
+          if (event === SseResponseEventEnum.answer) {
+            const text = typeof data.text === "string" ? data.text : "";
+            if (!text) return;
+            emitAnswerChunk(text);
+            return;
+          }
+
+          sendSseEvent(res, event, JSON.stringify(data));
+        },
+      });
+    } finally {
+      if (conversationId) {
+        unregisterActiveConversationRun({
+          token,
+          chatId: conversationId,
+          controller: workflowAbortController,
+        });
       }
-
-      sendSseEvent(res, event, JSON.stringify(data));
-    },
-  });
+    }
+  })();
   const durationSeconds = Number(((Date.now() - workflowStartAt) / 1000).toFixed(2));
 
   if (stream) {

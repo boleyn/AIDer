@@ -1,19 +1,18 @@
 import { Box, Flex, Text } from "@chakra-ui/react";
-import { useMemo } from "react";
-
-import Markdown from "@/components/Markdown";
-import AIResponseBox from "@/components/core/chat/components/AIResponseBox";
 import { extractText } from "@shared/chat/messages";
+import { useMemo } from "react";
 
 import { adaptConversationMessageToValues } from "../utils/chatMessageAdapter";
 
+import Markdown from "@/components/Markdown";
+import AIResponseBox from "@/components/core/chat/components/AIResponseBox";
 import type { ConversationMessage } from "@/types/conversation";
 
-type MessageFile = {
+interface MessageFile {
   name?: string;
   size?: number;
   type?: string;
-};
+}
 
 const formatFileSize = (size?: number) => {
   if (typeof size !== "number" || Number.isNaN(size) || size < 0) return "";
@@ -51,34 +50,34 @@ const ChatItem = ({
   return (
     <Flex justify={isUser ? "flex-end" : "flex-start"} w="full">
       <Box
-        className="chat-message"
-        maxW="92%"
-        minW="88px"
-        border="1px solid"
-        borderColor={isUser ? "rgba(52,122,255,0.38)" : "rgba(203,213,225,0.8)"}
-        borderRadius={isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px"}
+        backdropFilter="blur(5px)"
         bg={
           isUser
             ? "linear-gradient(135deg, rgba(58,124,255,0.14) 0%, rgba(34,211,238,0.18) 100%)"
             : "rgba(255,255,255,0.84)"
         }
-        backdropFilter="blur(5px)"
+        border="1px solid"
+        borderColor={isUser ? "rgba(52,122,255,0.38)" : "rgba(203,213,225,0.8)"}
+        borderRadius={isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px"}
+        boxShadow="0 10px 24px -20px rgba(15,23,42,0.5)"
+        className="chat-message"
+        color="myGray.700"
+        fontSize="sm"
+        maxW="92%"
+        minW="88px"
         px={4}
         py={3}
-        fontSize="sm"
-        color="myGray.700"
-        boxShadow="0 10px 24px -20px rgba(15,23,42,0.5)"
       >
         {isUser ? (
           <Flex direction="column" gap={2}>
             {files.length > 0 ? (
-              <Box border="1px solid" borderColor="blue.100" borderRadius="md" bg="white" p={2}>
-                <Text fontSize="xs" color="blue.700" fontWeight="700" mb={1.5}>
+              <Box bg="white" border="1px solid" borderColor="blue.100" borderRadius="md" p={2}>
+                <Text color="blue.700" fontSize="xs" fontWeight="700" mb={1.5}>
                   附件
                 </Text>
                 <Flex direction="column" gap={1}>
                   {files.map((file, index) => (
-                    <Text key={`${file.name || "file"}-${index}`} fontSize="xs" color="gray.700">
+                    <Text key={`${file.name || "file"}-${index}`} color="gray.700" fontSize="xs">
                       {file.name || `文件 ${index + 1}`}
                       {file.type ? ` · ${file.type}` : ""}
                       {formatFileSize(file.size) ? ` · ${formatFileSize(file.size)}` : ""}
@@ -91,7 +90,7 @@ const ChatItem = ({
             {content ? <Markdown source={content} /> : null}
           </Flex>
         ) : isSystem ? (
-          <Text fontSize="xs" color="gray.500">
+          <Text color="gray.500" fontSize="xs">
             {content}
           </Text>
         ) : (
@@ -100,9 +99,9 @@ const ChatItem = ({
               <AIResponseBox
                 key={`${messageId}-value-${index}`}
                 chatItemDataId={messageId}
-                value={value}
                 isChatting={Boolean(isStreaming)}
                 isLastResponseValue={index === adaptedValues.length - 1}
+                value={value}
               />
             ))}
           </Flex>

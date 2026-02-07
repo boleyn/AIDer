@@ -25,6 +25,7 @@ interface RunSimpleAgentWorkflowInput {
   messages: ChatCompletionMessageParam[];
   allTools: AgentToolDefinition[];
   tools: ChatCompletionTool[];
+  abortSignal?: AbortSignal;
   onEvent?: (event: SseEventName, data: Record<string, unknown>) => void;
 }
 
@@ -68,6 +69,7 @@ export const runSimpleAgentWorkflow = async ({
   messages,
   allTools,
   tools,
+  abortSignal,
   onEvent,
 }: RunSimpleAgentWorkflowInput): Promise<RunSimpleAgentWorkflowResult> => {
   const flowResponses: SimpleWorkflowNodeResponse[] = [];
@@ -83,6 +85,7 @@ export const runSimpleAgentWorkflow = async ({
       stream,
       toolCallMode: "toolChoice",
     },
+    isAborted: () => abortSignal?.aborted,
     handleInteractiveTool: async () => ({
       response: "",
       assistantMessages: [],
@@ -107,6 +110,15 @@ export const runSimpleAgentWorkflow = async ({
       });
     },
     handleToolResponse: async ({ call }) => {
+      if (abortSignal?.aborted) {
+        return {
+          response: "stopped",
+          assistantMessages: [],
+          usages: [],
+          stop: true,
+        };
+      }
+
       const tool = allTools.find((item) => item.name === call.function.name);
       const startAt = Date.now();
       let response = "";

@@ -1,11 +1,11 @@
+import { extractText } from "@shared/chat/messages";
+
 import { ChatItemValueTypeEnum } from "@/global/core/chat/constants";
 import type {
   AIChatItemValueItemType,
   ChatItemValueItemType,
   ToolModuleResponseItemType,
 } from "@/global/core/chat/type";
-import { extractText } from "@shared/chat/messages";
-
 import type { ConversationMessage } from "@/types/conversation";
 
 const safeJsonParse = <T>(value: string): T | null => {

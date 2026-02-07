@@ -1,25 +1,24 @@
-import { useSystemStore } from '@/web/common/system/useSystemStore';
+import type { ChatSettingType } from '@fastgpt/global/core/chat/setting/type';
+import type { GetRecentlyUsedAppsResponseType } from '@fastgpt/global/openapi/core/chat/api';
+import type { UserType } from '@fastgpt/global/support/user/type';
+import { useMemoEnhance } from '@fastgpt/web/hooks/useMemoEnhance';
+import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
+import { useMount } from 'ahooks';
+import { useRouter } from 'next/router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createContext } from 'use-context-selector';
+
 import type { ChatSettingTabOptionEnum } from '@/pageComponents/chat/constants';
 import {
   ChatSidebarPaneEnum,
   defaultCollapseStatus,
   type CollapseStatusType
 } from '@/pageComponents/chat/constants';
-import { getChatSetting } from '@/web/core/chat/api';
-import { useChatStore } from '@/web/core/chat/context/useChatStore';
-import type { ChatSettingType } from '@fastgpt/global/core/chat/setting/type';
-import { useRequest2 } from '@fastgpt/web/hooks/useRequest';
-import { useRouter } from 'next/router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createContext } from 'use-context-selector';
-import { useMemoEnhance } from '@fastgpt/web/hooks/useMemoEnhance';
 import { getRecentlyUsedApps } from '@/web/core/chat/api';
+import { useChatStore } from '@/web/core/chat/context/useChatStore';
 import { useUserStore } from '@/web/support/user/useUserStore';
-import { useMount } from 'ahooks';
-import type { GetRecentlyUsedAppsResponseType } from '@fastgpt/global/openapi/core/chat/api';
-import type { UserType } from '@fastgpt/global/support/user/type';
 
-export type ChatPageContextValue = {
+export interface ChatPageContextValue {
   // Pane & collapse
   pane: ChatSidebarPaneEnum;
   handlePaneChange: (
@@ -39,13 +38,17 @@ export type ChatPageContextValue = {
   userInfo: UserType | null;
   myApps: GetRecentlyUsedAppsResponseType;
   refreshRecentlyUsed: () => void;
-};
+}
 
 export const ChatPageContext = createContext<ChatPageContextValue>({
   pane: ChatSidebarPaneEnum.HOME,
-  handlePaneChange: () => {},
+  handlePaneChange: function (): void {
+    throw new Error('Function not implemented.');
+  },
   collapse: defaultCollapseStatus,
-  onTriggerCollapse: () => {},
+  onTriggerCollapse: function (): void {
+    throw new Error('Function not implemented.');
+  },
   chatSettings: undefined,
   logos: { wideLogoUrl: '', squareLogoUrl: '' },
   refreshChatSetting: function (): Promise<ChatSettingType | undefined> {
@@ -54,7 +57,9 @@ export const ChatPageContext = createContext<ChatPageContextValue>({
   isInitedUser: false,
   userInfo: null,
   myApps: [],
-  refreshRecentlyUsed: () => {}
+  refreshRecentlyUsed: function (): void {
+    throw new Error('Function not implemented.');
+  }
 });
 
 export const ChatPageContextProvider = ({
@@ -65,7 +70,6 @@ export const ChatPageContextProvider = ({
   children: React.ReactNode;
 }) => {
   const router = useRouter();
-  const { feConfigs } = useSystemStore();
   const { setSource, setAppId, setLastPane, setLastChatAppId, lastPane } = useChatStore();
   const { userInfo, initUserInfo } = useUserStore();
 
@@ -93,8 +97,8 @@ export const ChatPageContextProvider = ({
     if (routeAppId) setAppId(routeAppId);
     try {
       await initUserInfo();
-    } catch (error) {
-      console.log('User not logged in:', error);
+    } catch {
+      // ignore auth failure in unauthenticated chat contexts
     } finally {
       setSource('online');
       setIsInitedUser(true);
@@ -108,31 +112,10 @@ export const ChatPageContextProvider = ({
     }
   }, [routeAppId, setAppId, userInfo]);
 
-  const { data: chatSettings, runAsync: refreshChatSetting } = useRequest2(
-    async () => {
-      if (!feConfigs.isPlus) return;
-      return await getChatSetting();
-    },
-    {
-      manual: false,
-      refreshDeps: [feConfigs.isPlus],
-      onSuccess: (data) => {
-        if (!data) return;
-
-        if (!data.enableHome && pane === ChatSidebarPaneEnum.HOME) {
-          handlePaneChange(ChatSidebarPaneEnum.TEAM_APPS);
-          return;
-        }
-
-        if (
-          pane === ChatSidebarPaneEnum.HOME &&
-          routeAppId !== data.appId &&
-          data.quickAppList.every((q) => q._id !== routeAppId)
-        ) {
-          handlePaneChange(ChatSidebarPaneEnum.HOME, data.appId);
-        }
-      }
-    }
+  const chatSettings = undefined;
+  const refreshChatSetting = useCallback(
+    async (): Promise<ChatSettingType | undefined> => undefined,
+    []
   );
 
   const handlePaneChange = useCallback(

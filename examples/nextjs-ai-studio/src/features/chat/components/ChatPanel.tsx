@@ -5,6 +5,7 @@ import { streamFetch, SseResponseEventEnum } from "@shared/network/streamFetch";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+
 import { useConversations } from "../hooks/useConversations";
 import { getChatModels } from "../services/models";
 import type { ChatInputFile, ChatInputSubmitPayload } from "../types/chatInput";
@@ -20,6 +21,7 @@ import ChatItem from "./ChatItem";
 import ExecutionSummaryRow from "./ExecutionSummaryRow";
 
 import type { ConversationMessage } from "@/types/conversation";
+import { postStopV2Chat } from "@/web/core/chat/api";
 
 const normalizeStreamContent = (content: unknown) => {
   const text = extractText(content);
@@ -133,6 +135,8 @@ const ChatPanel = ({
     { value: "agent", label: "agent" },
   ]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const streamingConversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMessages(activeConversation?.messages ?? []);
@@ -214,6 +218,8 @@ const ChatPanel = ({
       ]);
 
       const abortCtrl = new AbortController();
+      streamAbortRef.current = abortCtrl;
+      streamingConversationIdRef.current = conversation.id;
       try {
         const updateAssistantMetadata = (
           updater: (current: Record<string, unknown>) => Record<string, unknown>
@@ -375,6 +381,9 @@ const ChatPanel = ({
           },
         });
       } catch (error) {
+        if (abortCtrl.signal.aborted) {
+          return;
+        }
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId
@@ -383,6 +392,10 @@ const ChatPanel = ({
           )
         );
       } finally {
+        if (streamAbortRef.current === abortCtrl) {
+          streamAbortRef.current = null;
+          streamingConversationIdRef.current = null;
+        }
         setStreamingMessageId(null);
         setIsSending(false);
       }
@@ -390,18 +403,32 @@ const ChatPanel = ({
     [ensureConversation, isSending, model, onFilesUpdated, token]
   );
 
+  const handleStop = useCallback(async () => {
+    const chatId = streamingConversationIdRef.current;
+    const abortCtrl = streamAbortRef.current;
+    if (!chatId || !abortCtrl) return;
+
+    try {
+      await postStopV2Chat({ token, chatId });
+    } catch {
+      // ignore stop API errors and still abort local stream
+    } finally {
+      abortCtrl.abort(new Error("stop"));
+    }
+  }, [token]);
+
   const activeConversationTitle = useMemo(() => activeConversation?.title, [activeConversation?.title]);
 
   return (
     <Flex
+      backdropFilter="blur(20px)"
       bg="rgba(255,255,255,0.72)"
       border="1px solid"
+      borderBottomLeftRadius="2xl"
       borderColor="rgba(255,255,255,0.75)"
       borderRight={0}
       borderTopLeftRadius="2xl"
-      borderBottomLeftRadius="2xl"
       boxShadow="0 24px 42px -28px rgba(15,23,42,0.35)"
-      backdropFilter="blur(20px)"
       direction="column"
       h={height}
       overflow="hidden"
@@ -437,7 +464,7 @@ const ChatPanel = ({
           ) : messages.length === 0 ? (
             <Flex align="center" color="gray.500" h="full" justify="center">
               <Box textAlign="center">
-                <Text fontSize="lg" fontWeight="700" color="myGray.700">
+                <Text color="myGray.700" fontSize="lg" fontWeight="700">
                   准备开始
                 </Text>
                 <Text fontSize="sm" mt={1}>
@@ -480,22 +507,27 @@ const ChatPanel = ({
           modelOptions={modelOptions}
           onChangeModel={setModel}
           onSend={handleSend}
+          onStop={handleStop}
         />
 
         {streamingMessageId ? (
           <Flex
             align="center"
+            bg="rgba(255,255,255,0.9)"
+            borderTop="1px solid rgba(226,232,240,0.9)"
             justify="space-between"
             px={4}
             py={2}
-            bg="rgba(255,255,255,0.9)"
-            borderTop="1px solid rgba(226,232,240,0.9)"
           >
-            <Text fontSize="xs" color="myGray.500">
+            <Text color="myGray.500" fontSize="xs">
               正在生成回复...
             </Text>
-            <Button size="xs" variant="ghost" isDisabled>
-              处理中
+            <Button
+              onClick={handleStop}
+              size="xs"
+              variant="ghost"
+            >
+              停止
             </Button>
           </Flex>
         ) : null}
