@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 
-import { createId } from "@shared/chat/messages";
+import { createId, extractText } from "@shared/chat/messages";
 import type { ToolCall } from "../../types/conversation";
 
 import { getMongoDb } from "../db/mongo";
@@ -63,6 +63,8 @@ type ConversationItemDoc = {
 
 const META_COLLECTION = "conversations";
 const ITEM_COLLECTION = "conversation_items";
+const MAX_LIST_CONVERSATIONS = 200;
+const MAX_RECORD_PAGE_SIZE = 2000;
 
 const migratedTokens = new Set<string>();
 
@@ -137,6 +139,12 @@ const docToMessage = (doc: ConversationItemDoc): ConversationMessage => ({
 
 const summaryTitle = (doc: ConversationMetaDoc) =>
   (doc.customTitle || doc.title || "历史记录").trim() || "历史记录";
+
+const deriveTitleFromMessage = (content: unknown): string | null => {
+  const text = extractText(content).trim();
+  if (!text) return null;
+  return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+};
 
 const toSummary = (doc: ConversationMetaDoc): ConversationSummary => {
   const now = new Date();
@@ -275,19 +283,21 @@ const ensureMetaByChatId = async ({
 }) => {
   const metaCol = await getMetaCollection();
   const now = new Date();
+  const hasTitle = typeof title === "string";
+  const nextTitle = hasTitle ? title.trim() || "历史记录" : "历史记录";
   await metaCol.updateOne(
     { token, chatId },
     {
       $set: {
         updateTime: now,
         deleteTime: null,
-        ...(typeof title === "string" ? { title: title.trim() || "历史记录" } : {}),
+        ...(hasTitle ? { title: nextTitle } : {}),
       },
       $setOnInsert: {
         _id: new ObjectId(),
         token,
         chatId,
-        title: title?.trim() || "历史记录",
+        ...(!hasTitle ? { title: nextTitle } : {}),
         customTitle: "",
         top: false,
         createTime: now,
@@ -299,14 +309,46 @@ const ensureMetaByChatId = async ({
 
 export async function listConversations(token: string): Promise<ConversationSummary[]> {
   await migrateLegacyTokenConversations(token);
-  const collection = await getMetaCollection();
-  const docs = await collection
+  const metaCol = await getMetaCollection();
+  const docs = await metaCol
     .find({ token, chatId: { $exists: true }, deleteTime: null })
     .sort({ top: -1, updateTime: -1 })
-    .limit(50)
+    .limit(MAX_LIST_CONVERSATIONS)
     .toArray();
+  const summaries = docs.map(toSummary);
+  const itemCol = await getItemCollection();
 
-  return docs.map(toSummary);
+  await Promise.all(
+    docs.map(async (doc, index) => {
+      const summary = summaries[index];
+      const chatId = doc.chatId;
+      if (!chatId || summary.title !== "历史记录") return;
+
+      const latestUser = await itemCol.findOne(
+        { token, chatId, role: "user" },
+        { sort: { time: -1, _id: -1 } }
+      );
+      const derivedTitle = deriveTitleFromMessage(latestUser?.content);
+      if (!derivedTitle) return;
+
+      summaries[index] = {
+        ...summary,
+        title: derivedTitle,
+      };
+
+      await metaCol.updateOne(
+        { token, chatId },
+        {
+          $set: {
+            title: derivedTitle,
+            updateTime: new Date(),
+          },
+        }
+      );
+    })
+  );
+
+  return summaries;
 }
 
 export async function getConversation(token: string, id: string): Promise<Conversation | null> {
@@ -358,12 +400,13 @@ export async function createConversation(
 export async function appendConversationMessages(
   token: string,
   id: string,
-  messages: ConversationMessage[]
+  messages: ConversationMessage[],
+  title?: string
 ): Promise<void> {
   if (messages.length === 0) return;
 
   const itemCol = await getItemCollection();
-  await ensureMetaByChatId({ token, chatId: id });
+  await ensureMetaByChatId({ token, chatId: id, title });
   const now = new Date();
 
   await itemCol.insertMany(
@@ -460,7 +503,7 @@ export async function getConversationRecords({
       .find({ token, chatId })
       .sort({ time: -1, _id: -1 })
       .skip(Math.max(0, offset))
-      .limit(Math.max(1, Math.min(200, pageSize)))
+      .limit(Math.max(1, Math.min(MAX_RECORD_PAGE_SIZE, pageSize)))
       .toArray(),
     itemCol.countDocuments({ token, chatId }),
   ]);
@@ -501,7 +544,7 @@ export async function getConversationRecordsV2({
   const itemCol = await getItemCollection();
   const docs = await itemCol.find({ token, chatId }).sort({ time: 1, _id: 1 }).toArray();
   const total = docs.length;
-  const size = Math.max(1, Math.min(200, pageSize));
+  const size = Math.max(1, Math.min(MAX_RECORD_PAGE_SIZE, pageSize));
 
   if (total === 0) {
     return { list: [], total: 0, hasMorePrev: false, hasMoreNext: false };

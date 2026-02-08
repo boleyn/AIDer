@@ -14,7 +14,6 @@ import {
 import {
   getConversation,
   appendConversationMessages,
-  replaceConversationMessages,
   type ConversationMessage,
 } from "@server/conversations/conversationStorage";
 import { getProject } from "@server/projects/projectStorage";
@@ -288,7 +287,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const conversation = conversationId ? await getConversation(token, conversationId) : null;
-
   const historyMessages = conversation?.messages ?? [];
   const newMessages = incomingMessages.map((message) => ({
     role: message.role,
@@ -302,6 +300,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     artifact: message.artifact,
   }));
   const contextMessages = [...historyMessages, ...newMessages];
+  const nextTitleFromInput = getTitleFromMessages(contextMessages);
 
   const appendAssistantError = async (text: string) => {
     if (!conversationId) return;
@@ -311,7 +310,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   if (conversationId && newMessages.length > 0) {
-    await appendConversationMessages(token, conversationId, newMessages);
+    await appendConversationMessages(token, conversationId, newMessages, nextTitleFromInput);
   }
 
   if (incomingMessages[incomingMessages.length - 1]?.role === "user") {
@@ -352,12 +351,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const assistantResponse = formatGlobalResult(result);
 
       if (conversationId) {
-        const storedMessages = [
-          ...contextMessages,
-          { role: "assistant", content: assistantResponse } as ConversationMessage,
-        ];
-        const nextTitle = getTitleFromMessages(storedMessages);
-        await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
+        await appendConversationMessages(
+          token,
+          conversationId,
+          [{ role: "assistant", content: assistantResponse }],
+          nextTitleFromInput
+        );
       }
 
       if (stream) {
@@ -536,26 +535,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (conversationId) {
-    const storedMessages = mergeAssistantToolMessages(
-      normalizeStoredMessages(
-      runResult.completeMessages.map(chatCompletionMessageToConversationMessage)
-      )
+    const generatedAssistantMessages = runResult.assistantMessages.map(
+      chatCompletionMessageToConversationMessage
+    );
+    const mergedAssistantMessages = mergeAssistantToolMessages(
+      normalizeStoredMessages(generatedAssistantMessages)
     );
 
     const assistantIndex = (() => {
-      for (let i = storedMessages.length - 1; i >= 0; i -= 1) {
-        if (storedMessages[i].role === "assistant") return i;
+      for (let i = mergedAssistantMessages.length - 1; i >= 0; i -= 1) {
+        if (mergedAssistantMessages[i].role === "assistant") return i;
       }
       return -1;
     })();
+
+    let assistantToStore: ConversationMessage | null = null;
     if (assistantIndex >= 0) {
-      const current = storedMessages[assistantIndex];
+      const current = mergedAssistantMessages[assistantIndex];
       const currentKwargs =
         current.additional_kwargs && typeof current.additional_kwargs === "object"
           ? current.additional_kwargs
           : {};
       const currentText = extractText(current.content);
-      storedMessages[assistantIndex] = {
+      assistantToStore = {
         ...current,
         content: currentText || resolvedFinalMessage,
         additional_kwargs: {
@@ -564,10 +566,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           durationSeconds,
         },
       };
+    } else if (resolvedFinalMessage) {
+      assistantToStore = {
+        role: "assistant",
+        content: resolvedFinalMessage,
+        id: createId(),
+        additional_kwargs: {
+          responseData: flowResponses,
+          durationSeconds,
+        },
+      };
     }
 
-    const nextTitle = getTitleFromMessages(storedMessages) || getTitleFromMessages(contextMessages);
-    await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
+    if (assistantToStore) {
+      await appendConversationMessages(token, conversationId, [assistantToStore], nextTitleFromInput);
+    }
   }
 
   if (!stream) {

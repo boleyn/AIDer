@@ -119,7 +119,8 @@ const MarkdownRender = ({
         position={'relative'}
         w={'100%'}
         maxW={'100%'}
-        overflow={'hidden'}
+        overflowX={'hidden'}
+        overflowY={'visible'}
         // 确保 Markdown 容器完全适配 MessageCard 的内容区域
         sx={{
           '& > *': {

@@ -1,4 +1,4 @@
-import { Box, Button, Flex, Spinner, Text } from "@chakra-ui/react";
+import { Box, Flex, Spinner, Text } from "@chakra-ui/react";
 import { withAuthHeaders } from "@features/auth/client/authClient";
 import { createId, extractText } from "@shared/chat/messages";
 import { streamFetch, SseResponseEventEnum } from "@shared/network/streamFetch";
@@ -371,6 +371,7 @@ const ChatPanel = ({
           headers: withAuthHeaders(),
           abortCtrl,
           onMessage: (item) => {
+            if (abortCtrl.signal.aborted) return;
             if (item.event === SseResponseEventEnum.answer) {
               if (!item.text) return;
               setMessages((prev) =>
@@ -480,25 +481,34 @@ const ChatPanel = ({
     ]
   );
 
-  const handleStop = useCallback(async () => {
+  const handleStop = useCallback(() => {
     const chatId = streamingConversationIdRef.current;
     const abortCtrl = streamAbortRef.current;
-    if (!chatId || !abortCtrl) return;
+    if (!abortCtrl) return;
 
-    try {
-      await fetch("/api/v2/chat/stop", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...withAuthHeaders(),
-        },
-        body: JSON.stringify({ token, chatId }),
+    // 立即停止前端流，确保按钮点击立刻生效
+    abortCtrl.abort(new Error("stop"));
+
+    if (!chatId) return;
+
+    // 后端停止异步执行，避免网络慢导致前端停不下来
+    const stopApiAbort = new AbortController();
+    const timeout = setTimeout(() => stopApiAbort.abort(new Error("stop timeout")), 5000);
+    fetch("/api/v2/chat/stop", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...withAuthHeaders(),
+      },
+      body: JSON.stringify({ token, chatId }),
+      signal: stopApiAbort.signal,
+    })
+      .catch(() => {
+        // ignore stop API errors
+      })
+      .finally(() => {
+        clearTimeout(timeout);
       });
-    } catch {
-      // ignore stop API errors and still abort local stream
-    } finally {
-      abortCtrl.abort(new Error("stop"));
-    }
   }, [token]);
 
   const activeConversationTitle = useMemo(() => activeConversation?.title, [activeConversation?.title]);
@@ -593,28 +603,6 @@ const ChatPanel = ({
           onSend={handleSend}
           onStop={handleStop}
         />
-
-        {streamingMessageId ? (
-          <Flex
-            align="center"
-            bg="rgba(255,255,255,0.9)"
-            borderTop="1px solid rgba(226,232,240,0.9)"
-            justify="space-between"
-            px={4}
-            py={2}
-          >
-            <Text color="myGray.500" fontSize="xs">
-              {t("chat:generating", { defaultValue: "正在生成回复..." })}
-            </Text>
-            <Button
-              onClick={handleStop}
-              size="xs"
-              variant="ghost"
-            >
-              停止
-            </Button>
-          </Flex>
-        ) : null}
       </Flex>
     </Flex>
   );

@@ -34,6 +34,7 @@ const ChatInput = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isInputLocked = isSending || isSubmitting;
 
   const canSend = useMemo(
     () => !isSending && !isSubmitting && (text.trim().length > 0 || files.length > 0),
@@ -75,7 +76,7 @@ const ChatInput = ({
     setFiles((prev) => [...prev, ...next]);
   }, []);
 
-  const handleSend = useCallback(async () => {
+  const handleSend = useCallback(() => {
     if (!canSend) return;
     const payload: ChatInputSubmitPayload = {
       text: text.trim(),
@@ -83,14 +84,13 @@ const ChatInput = ({
     };
 
     setIsSubmitting(true);
-    try {
-      await onSend(payload);
-      setText("");
-      setFiles([]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } finally {
+    setText("");
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    Promise.resolve(onSend(payload)).finally(() => {
       setIsSubmitting(false);
-    }
+    });
   }, [canSend, files, onSend, text]);
 
   return (
@@ -180,6 +180,7 @@ const ChatInput = ({
             maxH="128px"
             mb={0}
             minH="50px"
+            isDisabled={isInputLocked}
             onBlur={() => setIsFocused(false)}
             onChange={(event) => {
               setText(event.target.value);
@@ -293,6 +294,11 @@ const ChatInput = ({
                 )}
               </MenuList>
             </Menu>
+            {isSending ? (
+              <Text color="myGray.500" fontSize="xs">
+                {t("chat:generating", { defaultValue: "正在生成回复..." })}
+              </Text>
+            ) : null}
           </Flex>
 
           <Flex align="center" gap={1}>

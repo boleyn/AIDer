@@ -512,6 +512,19 @@
       }
     }
   }
+
+  /* 避免聊天气泡中列表 marker 与首字符被裁切 */
+  ul,
+  ol {
+    padding-left: 1.4em !important;
+    margin-left: 0;
+    list-style-position: inside;
+  }
+
+  li {
+    line-height: 1.7;
+    margin: 0.18em 0;
+  }
 }
 
 .mermaid {

@@ -72,7 +72,7 @@ export async function getConversation(
   try {
     const [initPayload, recordsPayload] = await Promise.all([
       getConversationInit({ token, chatId: id }),
-      getConversationRecordsV2({ token, chatId: id, pageSize: 200 }),
+      getConversationRecordsV2({ token, chatId: id, pageSize: 2000 }),
     ]);
 
     const messages = Array.isArray(recordsPayload.list) ? recordsPayload.list : [];
