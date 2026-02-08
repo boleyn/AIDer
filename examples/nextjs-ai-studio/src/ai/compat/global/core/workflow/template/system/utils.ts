@@ -1,1 +1,0 @@
-export { getHandleConfig } from '../utils';
