@@ -7,13 +7,15 @@ export interface ChatModelCatalog {
     source: "aiproxy" | "env";
   }>;
   defaultModel: string;
+  toolCallModel: string;
+  normalModel: string;
   source: "aiproxy" | "env";
   fetchedAt: string;
   warning?: string;
 }
 
-export const getChatModels = async (): Promise<ChatModelCatalog> => {
-  const response = await fetch("/api/chat/models", {
+export const getChatModels = async (forceRefresh = false): Promise<ChatModelCatalog> => {
+  const response = await fetch(`/api/chat/models${forceRefresh ? "?refresh=1" : ""}`, {
     cache: "no-store",
     headers: withAuthHeaders(),
   });

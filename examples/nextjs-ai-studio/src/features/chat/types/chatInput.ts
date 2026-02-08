@@ -11,6 +11,7 @@ export interface ChatInputSubmitPayload {
 export interface ChatInputModelOption {
   value: string;
   label: string;
+  icon?: string;
 }
 
 export interface ChatInputProps {

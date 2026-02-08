@@ -5,6 +5,7 @@ import { loadMcpTools } from "@server/agent/mcpClient";
 import { getAgentRuntimeConfig } from "@server/agent/runtimeConfig";
 import { createProjectTools } from "@server/agent/tools";
 import { runSimpleAgentWorkflow } from "@server/agent/workflow/simpleAgentWorkflow";
+import { getChatModelCatalog } from "@server/aiProxy/modelCatalog";
 import { requireAuth } from "@server/auth/session";
 import {
   registerActiveConversationRun,
@@ -115,56 +116,17 @@ const normalizeStoredMessages = (messages: ConversationMessage[]) => {
   return result.reverse();
 };
 
-const createNodeResponseMessages = (
-  responses: Array<{
-    nodeId: string;
-    moduleName: string;
-    moduleType: "tool";
-    runningTime: number;
-    status: "success" | "error";
-    toolInput: unknown;
-    toolRes: unknown;
-  }>
-): ConversationMessage[] =>
-  responses.map((item, index) => {
-    const statusLabel = item.status === "error" ? "❌" : "✅";
-    const runningTimeLabel = Number.isFinite(item.runningTime)
-      ? `${item.runningTime.toFixed(2)}s`
-      : "";
-    const title = [item.moduleName, statusLabel, runningTimeLabel].filter(Boolean).join(" · ");
-
-    return {
-      role: "tool",
-      id: `node-response-${item.nodeId}-${index}-${Date.now()}`,
-      name: title,
-      content: JSON.stringify({
-        toolName: title,
-        params:
-          typeof item.toolInput === "string"
-            ? item.toolInput
-            : JSON.stringify(item.toolInput, null, 2),
-        response:
-          typeof item.toolRes === "string"
-            ? item.toolRes
-            : JSON.stringify(
-                {
-                  result: item.toolRes,
-                  runningTime: item.runningTime,
-                  status: item.status,
-                },
-                null,
-                2
-              ),
-      }),
-    };
-  });
-
 const getTitleFromMessages = (messages: ConversationMessage[]): string | undefined => {
   const lastUser = [...messages].reverse().find((message) => message.role === "user");
   if (!lastUser) return undefined;
   const text = extractText(lastUser.content).trim();
   if (!text) return undefined;
   return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+};
+
+const isModelUnavailableError = (error: unknown) => {
+  const text = error instanceof Error ? error.message : String(error ?? "");
+  return /does not exist|do not have access|model.*not found/i.test(text);
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -198,6 +160,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const stream = req.body?.stream === true;
   const model = typeof req.body?.model === "string" ? req.body.model : "agent";
   const created = Math.floor(Date.now() / 1000);
+  let streamStarted = false;
 
   const emitAnswerChunk = (text: string, finishReason: string | null = null) => {
     sendSseEvent(
@@ -218,7 +181,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     );
   };
+  const startStream = () => {
+    if (streamStarted) return;
+    startSse(res);
+    streamStarted = true;
+  };
 
+  try {
   const project = await getProject(token);
   if (!project) {
     res.status(404).json({ error: "项目不存在" });
@@ -263,7 +232,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!parsed.ok) {
         await appendAssistantError(parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""));
         if (stream) {
-          startSse(res);
+          startStream();
           emitAnswerChunk(parsed.message + (parsed.hint ? `\n${parsed.hint}` : ""));
           emitAnswerChunk("", "stop");
           sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
@@ -303,7 +272,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (stream) {
-        startSse(res);
+        startStream();
         emitAnswerChunk(assistantResponse);
         emitAnswerChunk("", "stop");
         sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
@@ -340,7 +309,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const localTools = createProjectTools(token, tracker);
   const mcpTools = await loadMcpTools();
   const allTools = [...localTools, ...mcpTools];
-  const selectedModel = model && model !== "agent" ? model : runtimeConfig.toolCallModel;
+  const requestedModel = model && model !== "agent" ? model : runtimeConfig.toolCallModel;
+  const catalog = await getChatModelCatalog().catch(() => ({
+    models: [] as Array<{ id: string; label: string; source: "aiproxy" | "env" }>,
+    defaultModel: requestedModel,
+    toolCallModel: runtimeConfig.toolCallModel,
+    normalModel: runtimeConfig.normalModel,
+    source: "env" as const,
+    fetchedAt: new Date().toISOString(),
+    warning: "models_catalog_fetch_failed",
+  }));
+  const availableModels = new Set(catalog.models.map((item) => item.id));
+  const selectedModel =
+    availableModels.size === 0
+      ? requestedModel
+      : availableModels.has(requestedModel)
+      ? requestedModel
+      : availableModels.has(catalog.defaultModel)
+      ? catalog.defaultModel
+      : catalog.models[0]?.id || requestedModel;
 
   const tools: ChatCompletionTool[] = allTools.map((tool) => ({
     type: "function",
@@ -375,7 +362,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }) as ChatCompletionMessageParam[];
 
   if (stream) {
-    startSse(res);
+    startStream();
   }
 
   const workflowStartAt = Date.now();
@@ -388,30 +375,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
+  const tryRunWorkflow = async (modelToUse: string) =>
+    runSimpleAgentWorkflow({
+      selectedModel: modelToUse,
+      stream,
+      recursionLimit: runtimeConfig.recursionLimit || 6,
+      temperature: runtimeConfig.temperature,
+      messages: toAgentMessages(contextMessages),
+      allTools,
+      tools,
+      abortSignal: workflowAbortController.signal,
+      onEvent: (event, data) => {
+        if (!stream) return;
+
+        if (event === SseResponseEventEnum.answer) {
+          const text = typeof data.text === "string" ? data.text : "";
+          if (!text) return;
+          emitAnswerChunk(text);
+          return;
+        }
+
+        sendSseEvent(res, event, JSON.stringify(data));
+      },
+    });
+
+  const fallbackModelCandidates = [
+    catalog.defaultModel,
+    runtimeConfig.normalModel,
+    runtimeConfig.toolCallModel,
+  ].filter((item): item is string => Boolean(item && item !== selectedModel));
+
   const { runResult, finalMessage, flowResponses } = await (async () => {
     try {
-      return await runSimpleAgentWorkflow({
-        selectedModel,
-        stream,
-        recursionLimit: runtimeConfig.recursionLimit || 6,
-        temperature: runtimeConfig.temperature,
-        messages: toAgentMessages(contextMessages),
-        allTools,
-        tools,
-        abortSignal: workflowAbortController.signal,
-        onEvent: (event, data) => {
-          if (!stream) return;
-
-          if (event === SseResponseEventEnum.answer) {
-            const text = typeof data.text === "string" ? data.text : "";
-            if (!text) return;
-            emitAnswerChunk(text);
-            return;
-          }
-
-          sendSseEvent(res, event, JSON.stringify(data));
-        },
-      });
+      return await tryRunWorkflow(selectedModel);
+    } catch (error) {
+      if (isModelUnavailableError(error) && fallbackModelCandidates.length > 0) {
+        return await tryRunWorkflow(fallbackModelCandidates[0]);
+      }
+      throw error;
     } finally {
       if (conversationId) {
         unregisterActiveConversationRun({
@@ -423,6 +424,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   })();
   const durationSeconds = Number(((Date.now() - workflowStartAt) / 1000).toFixed(2));
+  const resolvedFinalMessage = (() => {
+    if (finalMessage) return finalMessage;
+    const assistantMessage =
+      [...runResult.assistantMessages].reverse().find((item) => item.role === "assistant") ||
+      runResult.assistantMessages[runResult.assistantMessages.length - 1];
+    if (!assistantMessage || typeof assistantMessage !== "object") return "";
+    const reasoning =
+      (assistantMessage as { reasoning_text?: unknown; reasoning_content?: unknown })
+        .reasoning_text ??
+      (assistantMessage as { reasoning_text?: unknown; reasoning_content?: unknown })
+        .reasoning_content;
+    return typeof reasoning === "string" ? reasoning : "";
+  })();
 
   if (stream) {
     sendSseEvent(
@@ -449,19 +463,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         current.additional_kwargs && typeof current.additional_kwargs === "object"
           ? current.additional_kwargs
           : {};
+      const currentText = extractText(current.content);
       storedMessages[assistantIndex] = {
         ...current,
+        content: currentText || resolvedFinalMessage,
         additional_kwargs: {
           ...currentKwargs,
           responseData: flowResponses,
           durationSeconds,
         },
       };
-    }
-
-    const nodeResponseMessages = createNodeResponseMessages(flowResponses);
-    if (nodeResponseMessages.length > 0) {
-      storedMessages.push(...nodeResponseMessages);
     }
 
     const nextTitle = getTitleFromMessages(storedMessages);
@@ -479,7 +490,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: finalMessage },
+          message: { role: "assistant", content: resolvedFinalMessage },
           finish_reason: runResult.finish_reason || "stop",
         },
       ],
@@ -490,4 +501,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   emitAnswerChunk("", "stop");
   sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
   res.end();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error ?? "未知错误");
+    if (stream) {
+      startStream();
+      emitAnswerChunk(`请求失败: ${message}`);
+      emitAnswerChunk("", "stop");
+      sendSseEvent(res, SseResponseEventEnum.answer, "[DONE]");
+      res.end();
+      return;
+    }
+    res.status(500).json({ error: message });
+  }
 }

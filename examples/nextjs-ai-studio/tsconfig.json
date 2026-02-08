@@ -23,7 +23,11 @@
       "@features/*": ["./src/features/*"],
       "@components/*": ["./src/components/*"],
       "@web/*": ["./src/web/*"],
-      "@shared/*": ["./src/shared/*"]
+      "@shared/*": ["./src/shared/*"],
+      "@fastgpt/global/*": ["./src/global/*", "./src/ai/compat/global/*"],
+      "@fastgpt/web/common/zustand": ["./src/web/common/zustand.ts"],
+      "@fastgpt/web/hooks/useRequest": ["./src/web/common/hooks/useRequest.tsx"],
+      "@fastgpt/web/styles/theme": ["./src/styles/theme.ts"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],

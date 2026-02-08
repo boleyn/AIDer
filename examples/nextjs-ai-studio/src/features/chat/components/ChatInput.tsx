@@ -1,27 +1,22 @@
 import {
   Box,
-  Button,
+  CloseButton,
   Flex,
   IconButton,
   Input,
-  Select,
-  Tag,
-  TagCloseButton,
-  TagLabel,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuList,
   Text,
   Textarea,
 } from "@chakra-ui/react";
+import { getFileIcon } from "@fastgpt/global/common/file/icon";
 import { createId } from "@shared/chat/messages";
-import { useCallback, useMemo, useRef, useState } from "react"; 
+import { useTranslation } from "next-i18next";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatInputFile, ChatInputProps, ChatInputSubmitPayload } from "../types/chatInput";
-
-const formatFileSize = (size: number) => {
-  if (size < 1024) return `${size} B`;
-  const kb = size / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-};
 
 const ChatInput = ({
   isSending,
@@ -29,17 +24,47 @@ const ChatInput = ({
   modelOptions,
   modelLoading,
   onChangeModel,
-  onStop,
   onSend,
+  onStop,
 }: ChatInputProps) => {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [files, setFiles] = useState<ChatInputFile[]>([]);
+  const [isComposing, setIsComposing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const canSend = useMemo(
-    () => !isSending && (text.trim().length > 0 || files.length > 0),
-    [files.length, isSending, text]
+    () => !isSending && !isSubmitting && (text.trim().length > 0 || files.length > 0),
+    [files.length, isSending, isSubmitting, text]
   );
+  const selectedModelOption = useMemo(
+    () => modelOptions.find((item) => item.value === model),
+    [model, modelOptions]
+  );
+  const previewFiles = useMemo(
+    () =>
+      files.map((item) => {
+        const icon = getFileIcon(item.file.name);
+        const isImage = item.file.type.startsWith("image/") || icon === "image";
+        return {
+          ...item,
+          icon,
+          isImage,
+          previewUrl: isImage ? URL.createObjectURL(item.file) : "",
+        };
+      }),
+    [files]
+  );
+
+  useEffect(() => {
+    return () => {
+      previewFiles.forEach((item) => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      });
+    };
+  }, [previewFiles]);
 
   const onPickFiles = useCallback((picked: FileList | null) => {
     if (!picked || picked.length === 0) return;
@@ -52,146 +77,286 @@ const ChatInput = ({
 
   const handleSend = useCallback(async () => {
     if (!canSend) return;
-
     const payload: ChatInputSubmitPayload = {
       text: text.trim(),
       files,
     };
 
-    await onSend(payload);
-    setText("");
-    setFiles([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    setIsSubmitting(true);
+    try {
+      await onSend(payload);
+      setText("");
+      setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } finally {
+      setIsSubmitting(false);
     }
   }, [canSend, files, onSend, text]);
 
   return (
-    <Flex
-      bg="rgba(255,255,255,0.9)"
-      borderTop="1px solid rgba(226,232,240,0.9)"
-      direction="column"
-      gap={3}
-      px={4}
-      py={3}
-    >
-      <Flex align="center" gap={2} justify="space-between">
-        <Text color="myGray.500" fontSize="xs" fontWeight="600" letterSpacing="0.02em">
-          当前模型
-        </Text>
-        <Select
-          bg="white"
-          borderColor="myGray.250"
-          isDisabled={modelLoading || isSending || modelOptions.length === 0}
-          maxW="220px"
-          onChange={(event) => onChangeModel(event.target.value)}
-          size="sm"
-          value={model}
-        >
-          {modelOptions.length === 0 ? (
-            <option value="agent">{modelLoading ? "加载模型中..." : "暂无可用模型"}</option>
-          ) : (
-            modelOptions.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))
-          )}
-        </Select>
-      </Flex>
-
-      {files.length > 0 ? (
-        <Box
-          bg="white"
-          border="1px solid"
-          borderColor="myGray.200"
-          borderRadius="md"
-          px={2}
-          py={2}
-        >
-          <Flex gap={2} wrap="wrap">
-            {files.map((item) => (
-              <Tag key={item.id} borderRadius="full" colorScheme="blue" size="sm" variant="subtle">
-                <TagLabel maxW="210px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-                  {item.file.name} ({formatFileSize(item.file.size)})
-                </TagLabel>
-                <TagCloseButton
-                  onClick={() => {
-                    setFiles((prev) => prev.filter((f) => f.id !== item.id));
-                  }}
-                />
-              </Tag>
+    <Box bg="white" px={4} py={3}>
+      <Flex
+        bg="white"
+        border="0.5px solid"
+        borderColor={isFocused ? "rgba(0,0,0,0.24)" : "rgba(0,0,0,0.18)"}
+        borderRadius="18px"
+        boxShadow={
+          isFocused
+            ? "0px 5px 20px -4px rgba(19, 51, 107, 0.13)"
+            : "0px 5px 16px -4px rgba(19, 51, 107, 0.08)"
+        }
+        direction="column"
+        minH="108px"
+        overflow="hidden"
+      >
+        {previewFiles.length > 0 ? (
+          <Flex gap="6px" mb={2} pt={2} px={3} userSelect="none" wrap="wrap">
+            {previewFiles.map((item) => (
+              <Box
+                key={item.id}
+                aspectRatio={item.isImage ? 1 : 4}
+                maxW={item.isImage ? "56px" : "224px"}
+                w={item.isImage ? "12.5%" : "calc(50% - 3px)"}
+              >
+                <Box
+                  _hover={{ ".file-preview-close": { display: "block" } }}
+                  alignItems="center"
+                  border="1px solid #E2E8F0"
+                  borderRadius="8px"
+                  boxShadow="0px 2.571px 6.429px 0px rgba(19, 51, 107, 0.08), 0px 0px 0.643px 0px rgba(19, 51, 107, 0.08)"
+                  h="100%"
+                  pl={item.isImage ? 0 : 2}
+                  position="relative"
+                  w="100%"
+                >
+                  <CloseButton
+                    bg="white"
+                    borderRadius="999px"
+                    className="file-preview-close"
+                    display={["block", "none"]}
+                    onClick={() => setFiles((prev) => prev.filter((f) => f.id !== item.id))}
+                    position="absolute"
+                    right="-8px"
+                    size="sm"
+                    top="-8px"
+                    zIndex={10}
+                  />
+                  {item.isImage ? (
+                    <Box
+                      alt={item.file.name}
+                      as="img"
+                      borderRadius="8px"
+                      h="100%"
+                      objectFit="contain"
+                      src={item.previewUrl}
+                      w="100%"
+                    />
+                  ) : (
+                    <Flex align="center" gap={2} h="100%" pr={2}>
+                      <Box as="img" h="24px" src={`/icons/chat/${item.icon}.svg`} w="24px" />
+                      <Text className="textEllipsis" fontSize="xs" noOfLines={1}>
+                        {item.file.name}
+                      </Text>
+                    </Flex>
+                  )}
+                </Box>
+              </Box>
             ))}
           </Flex>
-        </Box>
-      ) : null}
+        ) : null}
 
-      <Flex align="flex-end" gap={2}>
-        <Textarea
-          _focusVisible={{
-            borderColor: "primary.400",
-            boxShadow: "0 0 0 1px rgba(51,112,255,0.35)",
-          }}
-          bg="white"
-          borderColor="myGray.250"
-          isDisabled={isSending}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder="输入你的问题，按 Enter 发送，Shift + Enter 换行"
-          resize="none"
-          rows={2}
-          value={text}
-        />
+        <Flex align="center" px={2}>
+          <Textarea
+            _focusVisible={{ border: "none", boxShadow: "none" }}
+            _placeholder={{
+              color: "#707070",
+              fontSize: "13px",
+            }}
+            border="none"
+            color="myGray.900"
+            fontSize="1rem"
+            fontWeight={400}
+            lineHeight="1.5"
+            maxH="128px"
+            mb={0}
+            minH="50px"
+            onBlur={() => setIsFocused(false)}
+            onChange={(event) => {
+              setText(event.target.value);
+              const textarea = event.target;
+              textarea.style.height = "50px";
+              const nextHeight = Math.min(textarea.scrollHeight, 128);
+              textarea.style.height = `${nextHeight}px`;
+              textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
+            }}
+            onCompositionEnd={() => setIsComposing(false)}
+            onCompositionStart={() => setIsComposing(true)}
+            onFocus={() => setIsFocused(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                if (isComposing) return;
+                event.preventDefault();
+                handleSend();
+              }
+            }}
+            overflowX="hidden"
+            overflowY="hidden"
+            placeholder={t("chat:input_placeholder", {
+              defaultValue: "输入你的问题，按 Enter 发送，Shift + Enter 换行",
+            })}
+            px={2}
+            resize="none"
+            rows={1}
+            value={text}
+            w="100%"
+            whiteSpace="pre-wrap"
+          />
+        </Flex>
 
-        <Flex direction="column" gap={2}>
-          <Input
-            ref={fileInputRef}
-            display="none"
-            onChange={(event) => onPickFiles(event.target.files)}
-            type="file"
-            multiple
-          />
-          <IconButton
-            aria-label="选择文件"
-            borderColor="myGray.250"
-            h="42px"
-            icon={<Text fontSize="lg" lineHeight="1">+</Text>}
-            isDisabled={isSending}
-            minW="42px"
-            onClick={() => fileInputRef.current?.click()}
-            variant="outline"
-          />
-          <Button
-            _active={{ filter: "brightness(0.98)" }}
-            _hover={{ filter: "brightness(1.06)" }}
-            bgGradient="linear(to-r, blue.500, cyan.500)"
-            color="white"
-            h="42px"
-            isDisabled={!canSend}
-            isLoading={isSending}
-            minW="74px"
-            onClick={handleSend}
-          >
-            发送
-          </Button>
-          {isSending ? (
-            <Button
-              h="42px"
-              minW="74px"
-              onClick={onStop}
-              variant="outline"
+        <Flex align="center" h="44px" justify="space-between" pb={2} pl={3} pr={3}>
+          <Flex align="center" gap={2} minW={0}>
+            <Menu placement="top-start" isLazy>
+              <MenuButton
+                _hover={{ bg: "rgba(0, 0, 0, 0.04)" }}
+                aria-label={t("chat:tool_call_model", { defaultValue: "工具调用模型" })}
+                as={IconButton}
+                borderRadius="8px"
+                h="30px"
+                icon={
+                  selectedModelOption?.icon ? (
+                    <Box
+                      alt={selectedModelOption.label}
+                      as="img"
+                      borderRadius="999px"
+                      h="18px"
+                      objectFit="cover"
+                      src={selectedModelOption.icon}
+                      w="18px"
+                    />
+                  ) : (
+                    <Text color="#64748B" fontSize="14px" lineHeight="1">
+                      AI
+                    </Text>
+                  )
+                }
+                isDisabled={modelLoading || isSending || isSubmitting || modelOptions.length === 0}
+                minW="30px"
+                variant="ghost"
+              />
+              <MenuList maxH="240px" minW="220px" overflowY="auto" py={1}>
+                {modelOptions.length === 0 ? (
+                  <MenuItem isDisabled>
+                    {modelLoading
+                      ? t("chat:model_loading", { defaultValue: "加载模型中..." })
+                      : t("chat:model_empty", { defaultValue: "暂无可用模型" })}
+                  </MenuItem>
+                ) : (
+                  modelOptions.map((item) => (
+                    <MenuItem
+                      key={item.value}
+                      bg={item.value === model ? "#EFF6FF" : "transparent"}
+                      onClick={() => onChangeModel(item.value)}
+                    >
+                      <Flex align="center" gap={2} minW={0}>
+                        {item.icon ? (
+                          <Box
+                            alt={item.label}
+                            as="img"
+                            borderRadius="999px"
+                            h="18px"
+                            objectFit="cover"
+                            src={item.icon}
+                            w="18px"
+                          />
+                        ) : (
+                          <Box
+                            alignItems="center"
+                            bg="#E2E8F0"
+                            borderRadius="999px"
+                            color="#475569"
+                            display="flex"
+                            fontSize="10px"
+                            h="18px"
+                            justifyContent="center"
+                            textTransform="uppercase"
+                            w="18px"
+                          >
+                            {item.label.slice(0, 1)}
+                          </Box>
+                        )}
+                        <Text className="textEllipsis" fontSize="sm">
+                          {item.label}
+                        </Text>
+                      </Flex>
+                    </MenuItem>
+                  ))
+                )}
+              </MenuList>
+            </Menu>
+          </Flex>
+
+          <Flex align="center" gap={1}>
+            <Input
+              ref={fileInputRef}
+              display="none"
+              onChange={(event) => onPickFiles(event.target.files)}
+              type="file"
+              multiple
+            />
+            <Flex
+              _hover={{ bg: "rgba(0, 0, 0, 0.04)" }}
+              align="center"
+              borderRadius="6px"
+              cursor={isSending || isSubmitting ? "not-allowed" : "pointer"}
+              h="36px"
+              justify="center"
+              onClick={() => {
+                if (isSending || isSubmitting) return;
+                fileInputRef.current?.click();
+              }}
+              w="36px"
             >
-              停止
-            </Button>
-          ) : null}
+              <Box alt="attach" as="img" h="16px" opacity={0.75} src="/icons/chat/fileSelect.svg" w="16px" />
+            </Flex>
+
+            <Box bg="myGray.200" h="20px" mx={1} w="2px" />
+
+            <IconButton
+              _hover={{ bg: isSending ? "primary.100" : canSend ? "#2563EB" : "rgba(17, 24, 36, 0.1)" }}
+              aria-label={
+                isSending
+                  ? t("chat:stop_generating", { defaultValue: "停止生成" })
+                  : t("common:Send", { defaultValue: "发送" })
+              }
+              bg={isSending ? "primary.50" : canSend ? "primary.500" : "rgba(17, 24, 36, 0.1)"}
+              borderRadius="12px"
+              h="36px"
+              icon={
+                <Box
+                  as="img"
+                  h="18px"
+                  src={isSending ? "/icons/chat/stop.svg" : "/icons/chat/sendFill.svg"}
+                  sx={{
+                    filter: isSending ? "none" : "brightness(0) invert(1)",
+                  }}
+                  w="18px"
+                />
+              }
+              isDisabled={!isSending && !canSend}
+              onClick={() => {
+                if (isSending) {
+                  onStop?.();
+                  return;
+                }
+                handleSend();
+              }}
+              type="button"
+              w="36px"
+            />
+          </Flex>
         </Flex>
       </Flex>
-    </Flex>
+    </Box>
   );
 };
 

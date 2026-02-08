@@ -10,7 +10,7 @@ import type {
   OpenAI,
   StreamChatType,
   UnStreamChatType
-} from '@fastgpt/ai/compat/global/core/ai/type';
+} from '@aistudio/ai/compat/global/core/ai/type';
 import {
   computedMaxToken,
   computedTemperature,
@@ -853,7 +853,11 @@ export const createChatCompletion = async ({
     }
     body.model = modelData.model;
 
-    ai = getAIApi();
+    const formatTimeout = timeout ? timeout : 600000;
+    ai = getAIApi({
+      userKey,
+      timeout: formatTimeout
+    });
 
     addLog.info(`Start create chat completion`, {
       model: body.model
@@ -931,7 +935,7 @@ export const createChatCompletion = async ({
         },
         response: responseInfo
       });
-      return Promise.reject(`您的 API key 出错了: ${getErrText(error)}`);
+      return Promise.reject(`您的 OpenAI key 出错了: ${getErrText(error)}`);
     } else {
       addLog.info(`[LLM Request][Body]`, {
         body: requestBodyLog

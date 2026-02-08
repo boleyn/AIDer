@@ -96,6 +96,11 @@ export const runSimpleAgentWorkflow = async ({
       if (!text) return;
       onEvent?.(SseResponseEventEnum.answer, { text });
     },
+    onReasoning: ({ text }) => {
+      if (!text) return;
+      // Some models stream only reasoning tokens; forward them to avoid blank UI output.
+      onEvent?.(SseResponseEventEnum.answer, { text });
+    },
     onToolCall: ({ call }) => {
       onEvent?.(SseResponseEventEnum.toolCall, {
         id: call.id,
@@ -201,10 +206,18 @@ export const runSimpleAgentWorkflow = async ({
     }
     return "";
   })();
+  const finalReasoning = (() => {
+    if (!assistantMessage || typeof assistantMessage !== "object") return "";
+    const value = (assistantMessage as { reasoning_text?: unknown; reasoning_content?: unknown })
+      .reasoning_text ??
+      (assistantMessage as { reasoning_text?: unknown; reasoning_content?: unknown })
+        .reasoning_content;
+    return typeof value === "string" ? value : "";
+  })();
 
   return {
     runResult,
-    finalMessage,
+    finalMessage: finalMessage || finalReasoning,
     flowResponses,
   };
 };

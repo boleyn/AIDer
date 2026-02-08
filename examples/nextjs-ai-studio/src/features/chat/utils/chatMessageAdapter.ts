@@ -171,12 +171,7 @@ export const adaptConversationMessageToValues = (
 
     const text = extractText(message.content);
     if (!text.trim()) {
-      return [
-        {
-          type: ChatItemValueTypeEnum.text,
-          text: { content: "" },
-        },
-      ];
+      return [];
     }
 
     return [

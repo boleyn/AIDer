@@ -3,6 +3,7 @@ import { withAuthHeaders } from "@features/auth/client/authClient";
 import { createId, extractText } from "@shared/chat/messages";
 import { streamFetch, SseResponseEventEnum } from "@shared/network/streamFetch";
 import { useRouter } from "next/router";
+import { useTranslation } from "next-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 
@@ -10,10 +11,7 @@ import { useConversations } from "../hooks/useConversations";
 import { getChatModels } from "../services/models";
 import type { ChatInputFile, ChatInputSubmitPayload } from "../types/chatInput";
 import { getExecutionSummary } from "../utils/executionSummary";
-import {
-  upsertFlowNodeToolMessage,
-  type FlowNodeResponsePayload,
-} from "../utils/flowNodeMessages";
+import { type FlowNodeResponsePayload } from "../utils/flowNodeMessages";
 
 import ChatHeader from "./ChatHeader";
 import ChatInput from "./ChatInput";
@@ -21,6 +19,7 @@ import ChatItem from "./ChatItem";
 import ExecutionSummaryRow from "./ExecutionSummaryRow";
 
 import type { ConversationMessage } from "@/types/conversation";
+import { useSystemStore } from "@/web/common/system/useSystemStore";
 import { postStopV2Chat } from "@/web/core/chat/api";
 
 const normalizeStreamContent = (content: unknown) => {
@@ -113,6 +112,7 @@ const ChatPanel = ({
   onFilesUpdated?: (files: Record<string, { code: string }>) => void;
   height?: string;
 }) => {
+  const { t } = useTranslation();
   const router = useRouter();
   const {
     conversations,
@@ -131,9 +131,10 @@ const ChatPanel = ({
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [modelLoading, setModelLoading] = useState(false);
   const [model, setModel] = useState("agent");
-  const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string }>>([
+  const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string; icon?: string }>>([
     { value: "agent", label: "agent" },
   ]);
+  const llmModelList = useSystemStore((state) => state.llmModelList);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
@@ -145,16 +146,23 @@ const ChatPanel = ({
   useEffect(() => {
     let active = true;
     setModelLoading(true);
-    getChatModels()
+    getChatModels(true)
       .then((catalog) => {
         if (!active) return;
         const options = catalog.models.length
-          ? catalog.models.map((item) => ({ value: item.id, label: item.label }))
-          : [{ value: catalog.defaultModel || "agent", label: catalog.defaultModel || "agent" }];
+          ? catalog.models.map((item) => {
+              const matched = llmModelList.find((modelItem) => modelItem.model === item.id);
+              return {
+                value: item.id,
+                icon: matched?.avatar,
+                label: matched?.name || item.label || item.id,
+              };
+            })
+          : [{ value: catalog.defaultModel || catalog.toolCallModel || "agent", label: catalog.defaultModel || catalog.toolCallModel || "agent" }];
         setModelOptions(options);
         setModel((prev) => {
           if (options.some((item) => item.value === prev)) return prev;
-          return catalog.defaultModel || options[0]?.value || "agent";
+          return catalog.defaultModel || catalog.toolCallModel || options[0]?.value || "agent";
         });
       })
       .catch(() => {
@@ -168,7 +176,7 @@ const ChatPanel = ({
     return () => {
       active = false;
     };
-  }, []);
+  }, [llmModelList]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -181,7 +189,7 @@ const ChatPanel = ({
       if ((text.length === 0 && payload.files.length === 0) || isSending) return;
 
       const conversation = await ensureConversation();
-      if (!conversation) return;
+      const conversationId = conversation?.id ?? activeConversation?.id;
 
       const filePrompt = await buildFilePrompt(payload.files);
       const displayText = text || `已上传 ${payload.files.length} 个文件`;
@@ -219,7 +227,7 @@ const ChatPanel = ({
 
       const abortCtrl = new AbortController();
       streamAbortRef.current = abortCtrl;
-      streamingConversationIdRef.current = conversation.id;
+      streamingConversationIdRef.current = conversationId ?? null;
       try {
         const updateAssistantMetadata = (
           updater: (current: Record<string, unknown>) => Record<string, unknown>
@@ -235,16 +243,6 @@ const ChatPanel = ({
                 ...msg,
                 additional_kwargs: updater(current),
               };
-            })
-          );
-        };
-
-        const upsertFlowNodeResponseMessage = (nextPayload: FlowNodeResponsePayload) => {
-          setMessages((prev) =>
-            upsertFlowNodeToolMessage({
-              assistantMessageId,
-              messages: prev,
-              payload: nextPayload,
             })
           );
         };
@@ -295,7 +293,7 @@ const ChatPanel = ({
             token,
             messages: [userMessage],
             stream: true,
-            conversationId: conversation.id,
+            ...(conversationId ? { conversationId } : {}),
             model,
           },
           headers: withAuthHeaders(),
@@ -358,7 +356,6 @@ const ChatPanel = ({
             }
             if (item.event === SseResponseEventEnum.flowNodeResponse) {
               const streamPayload = item as FlowNodeResponsePayload;
-              upsertFlowNodeResponseMessage(streamPayload);
               updateAssistantMetadata((current) => {
                 const currentResponseData = Array.isArray(current.responseData)
                   ? current.responseData
@@ -400,7 +397,7 @@ const ChatPanel = ({
         setIsSending(false);
       }
     },
-    [ensureConversation, isSending, model, onFilesUpdated, token]
+    [activeConversation?.id, ensureConversation, isSending, model, onFilesUpdated, token]
   );
 
   const handleStop = useCallback(async () => {
@@ -421,14 +418,14 @@ const ChatPanel = ({
 
   return (
     <Flex
-      backdropFilter="blur(20px)"
-      bg="rgba(255,255,255,0.72)"
+      backdropFilter="blur(10px)"
+      bg="rgba(255,255,255,0.9)"
       border="1px solid"
-      borderBottomLeftRadius="2xl"
-      borderColor="rgba(255,255,255,0.75)"
+      borderBottomLeftRadius="xl"
+      borderColor="rgba(203,213,225,0.85)"
       borderRight={0}
-      borderTopLeftRadius="2xl"
-      boxShadow="0 24px 42px -28px rgba(15,23,42,0.35)"
+      borderTopLeftRadius="xl"
+      boxShadow="0 12px 30px -18px rgba(15,23,42,0.2)"
       direction="column"
       h={height}
       overflow="hidden"
@@ -450,7 +447,7 @@ const ChatPanel = ({
       <Flex direction="column" flex="1" overflow="hidden">
         <Box
           ref={scrollRef}
-          bg="linear-gradient(180deg, rgba(248,250,252,0.72) 0%, rgba(241,245,249,0.62) 100%)"
+          bg="linear-gradient(180deg, rgba(248,250,252,0.82) 0%, rgba(241,245,249,0.78) 100%)"
           flex="1"
           overflowY="auto"
           px={4}
@@ -459,16 +456,16 @@ const ChatPanel = ({
           {!isInitialized || isLoadingConversation ? (
             <Flex align="center" color="gray.600" gap={2} h="full" justify="center">
               <Spinner size="sm" />
-              <Text fontSize="sm">加载对话...</Text>
+              <Text fontSize="sm">{t("chat:loading_conversation", { defaultValue: "加载对话..." })}</Text>
             </Flex>
           ) : messages.length === 0 ? (
             <Flex align="center" color="gray.500" h="full" justify="center">
               <Box textAlign="center">
                 <Text color="myGray.700" fontSize="lg" fontWeight="700">
-                  准备开始
+                  {t("chat:ready_start", { defaultValue: "准备开始" })}
                 </Text>
                 <Text fontSize="sm" mt={1}>
-                  描述你想改的功能，我会直接修改代码
+                  {t("chat:ready_desc", { defaultValue: "描述你想改的功能，我会直接修改代码" })}
                 </Text>
               </Box>
             </Flex>
@@ -520,7 +517,7 @@ const ChatPanel = ({
             py={2}
           >
             <Text color="myGray.500" fontSize="xs">
-              正在生成回复...
+              {t("chat:generating", { defaultValue: "正在生成回复..." })}
             </Text>
             <Button
               onClick={handleStop}

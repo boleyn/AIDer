@@ -4,7 +4,7 @@ import type {
   ChatCompletionMessageParam,
   ChatCompletionTool
 } from './compat/global/core/ai/type';
-import { getAIApi } from './config';
+import { getAxiosConfig } from './config';
 
 const buildUrl = (baseUrl: string) => {
   const normalized = baseUrl.replace(/\/$/, '');
@@ -21,12 +21,12 @@ export const createChatCompletion = async ({
   body: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming;
   headers?: Record<string, string>;
 }) => {
-  const { baseUrl, apiKey } = getAIApi();
+  const { baseUrl, authorization } = getAxiosConfig();
   const response = await fetch(buildUrl(baseUrl), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: authorization,
       ...(headers || {})
     },
     body: JSON.stringify(body)
@@ -71,7 +71,7 @@ export const createChatCompletion = async ({
           }
         }
       }
-    } as AsyncIterable<any> & { controller?: AbortController };
+    } as AsyncIterable<unknown> & { controller?: AbortController };
     return asyncIterable;
   }
 
@@ -94,7 +94,7 @@ export const llmCompletionsBodyFormat = ({
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
-  tool_choice?: any;
+  tool_choice?: unknown;
   parallel_tool_calls?: boolean;
 }) => {
   return {

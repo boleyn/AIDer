@@ -1,6 +1,12 @@
-import React from "react";
+import { createContext } from "use-context-selector";
 
-export const WorkflowRuntimeContext = React.createContext<any>({
+interface WorkflowRuntimeValue {
+  appId: string;
+  chatId: string;
+  outLinkAuthData: unknown;
+}
+
+export const WorkflowRuntimeContext = createContext<WorkflowRuntimeValue>({
   appId: "",
   chatId: "",
   outLinkAuthData: null
