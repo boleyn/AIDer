@@ -2,17 +2,21 @@ import { Box, Flex, Text } from "@chakra-ui/react";
 import { extractText } from "@shared/chat/messages";
 import { useTranslation } from "next-i18next";
 import { useMemo } from "react";
-
-import { adaptConversationMessageToValues } from "../utils/chatMessageAdapter";
-
 import Markdown from "@/components/Markdown";
-import AIResponseBox from "@/components/core/chat/components/AIResponseBox";
+
 import type { ConversationMessage } from "@/types/conversation";
 
 interface MessageFile {
   name?: string;
   size?: number;
   type?: string;
+}
+
+interface ToolDetail {
+  id?: string;
+  toolName?: string;
+  params?: string;
+  response?: string;
 }
 
 const formatFileSize = (size?: number) => {
@@ -30,6 +34,13 @@ const getMessageFiles = (message: ConversationMessage): MessageFile[] => {
   return files.filter((file): file is MessageFile => Boolean(file && typeof file === "object"));
 };
 
+const getToolDetails = (message: ConversationMessage): ToolDetail[] => {
+  if (!message.additional_kwargs || typeof message.additional_kwargs !== "object") return [];
+  const raw = (message.additional_kwargs as { toolDetails?: unknown }).toolDetails;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((item): item is ToolDetail => Boolean(item && typeof item === "object"));
+};
+
 const ChatItem = ({
   message,
   isStreaming,
@@ -45,10 +56,9 @@ const ChatItem = ({
   const isSystem = message.role === "system";
 
   const files = useMemo(() => getMessageFiles(message), [message]);
-  const adaptedValues = useMemo(() => adaptConversationMessageToValues(message), [message]);
+  const toolDetails = useMemo(() => getToolDetails(message), [message]);
 
-  if (message.role === "assistant" && adaptedValues.length === 0 && !isStreaming) return null;
-  if (!content.trim() && !isStreaming && files.length === 0 && message.role !== "assistant") return null;
+  if (!content.trim() && !isStreaming && files.length === 0 && toolDetails.length === 0) return null;
 
   return (
     <Flex justify={isUser ? "flex-end" : "flex-start"} w="full">
@@ -98,15 +108,39 @@ const ChatItem = ({
           </Text>
         ) : (
           <Flex direction="column" gap={2}>
-            {adaptedValues.map((value, index) => (
-              <AIResponseBox
-                key={`${messageId}-value-${index}`}
-                chatItemDataId={messageId}
-                isChatting={Boolean(isStreaming)}
-                isLastResponseValue={index === adaptedValues.length - 1}
-                value={value}
-              />
-            ))}
+            {toolDetails.length > 0 ? (
+              <Flex direction="column" gap={2}>
+                {toolDetails.map((tool, index) => (
+                  <Box
+                    key={tool.id || `${messageId}-tool-${index}`}
+                    bg="rgba(248,250,252,0.95)"
+                    border="1px solid"
+                    borderColor="rgba(203,213,225,0.9)"
+                    borderRadius="10px"
+                    p={2}
+                  >
+                    <Text color="blue.700" fontSize="xs" fontWeight="700">
+                      {tool.toolName || `工具 ${index + 1}`}
+                    </Text>
+                    {tool.params ? (
+                      <Text color="gray.600" fontFamily="mono" fontSize="11px" mt={1} whiteSpace="pre-wrap">
+                        {tool.params}
+                      </Text>
+                    ) : null}
+                    {tool.response ? (
+                      <Text color="gray.800" fontSize="12px" mt={1.5} whiteSpace="pre-wrap">
+                        {tool.response}
+                      </Text>
+                    ) : isStreaming ? (
+                      <Text color="gray.500" fontSize="12px" mt={1.5}>
+                        执行中...
+                      </Text>
+                    ) : null}
+                  </Box>
+                ))}
+              </Flex>
+            ) : null}
+            {content ? <Markdown source={content} /> : null}
           </Flex>
         )}
       </Box>

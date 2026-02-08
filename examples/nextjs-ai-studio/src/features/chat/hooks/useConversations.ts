@@ -3,13 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 
 import {
-  createConversation,
   deleteConversation as deleteConversationRequest,
   deleteAllConversations as deleteAllConversationsRequest,
   getConversation,
   listConversations,
 } from "../services/conversations";
-import { INITIAL_ASSISTANT_MESSAGE } from "../utils/constants";
 
 import type { Conversation, ConversationSummary } from "@/types/conversation";
 
@@ -121,27 +119,31 @@ export function useConversations(token: string, router: NextRouter): UseConversa
 
   const createNewConversation = useCallback(async (): Promise<Conversation | null> => {
     if (!token) return null;
-    setIsLoadingConversation(true);
-    const conversation = await createConversation(token, [
-      { role: "assistant", content: INITIAL_ASSISTANT_MESSAGE, id: createId() },
-    ]);
-    setIsLoadingConversation(false);
-    if (conversation) {
-      activeConversationIdRef.current = conversation.id;
-      setActiveConversation(conversation);
-      setConversations((prev) => [conversation, ...prev]);
-      if (queryConversationId !== conversation.id) {
-        router.replace(
-          {
-            pathname: router.pathname,
-            query: { ...router.query, conversation: conversation.id },
-          },
-          undefined,
-          { shallow: true }
-        );
-      }
+    const now = new Date().toISOString();
+    const conversation: Conversation = {
+      id: createId(),
+      title: "新对话",
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+    };
+
+    activeConversationIdRef.current = conversation.id;
+    setActiveConversation(conversation);
+    setConversations((prev) => [conversation, ...prev.filter((item) => item.id !== conversation.id)]);
+
+    if (queryConversationId !== conversation.id) {
+      router.replace(
+        {
+          pathname: router.pathname,
+          query: { ...router.query, conversation: conversation.id },
+        },
+        undefined,
+        { shallow: true }
+      );
     }
-    return conversation ?? null;
+
+    return conversation;
   }, [queryConversationId, router, token]);
 
   const ensureConversation = useCallback(async () => {

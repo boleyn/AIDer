@@ -7,7 +7,6 @@ import type {
   ChatCompletionMessageParam,
   SdkChatCompletionMessageParam
 } from '@aistudio/ai/compat/global/core/ai/type.d';
-import { axios } from '@aistudio/ai/compat/common/api/axios';
 import { ChatCompletionRequestMessageRoleEnum } from '@aistudio/ai/compat/global/core/ai/constants';
 import { i18nT } from '@aistudio/ai/compat/web/i18n/utils';
 import { addLog } from '@aistudio/ai/compat/common/system/log';
@@ -198,10 +197,10 @@ export const loadRequestMessages = async ({
               }
 
               // 检查下这个图片是否可以被访问，如果不行的话，则过滤掉
-              const response = await axios.head(imgUrl, {
-                timeout: 10000
+              const response = await fetch(imgUrl, {
+                method: 'HEAD'
               });
-              if (response.status < 200 || response.status >= 400) {
+              if (!response.ok) {
                 addLog.info(`Filter invalid image: ${imgUrl}`);
                 return;
               }

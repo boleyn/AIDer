@@ -66,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body;
   const parseResult = payloadSchema.safeParse(body);
   if (!parseResult.success) {
-    res.status(400).json({ error: parseResult.error.errors[0]?.message || "参数错误" });
+    res.status(400).json({ error: parseResult.error.issues[0]?.message || "参数错误" });
     return;
   }
 

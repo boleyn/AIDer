@@ -164,22 +164,39 @@ export const adaptConversationMessageToValues = (
   }
 
   if (message.role === "assistant") {
+    const toolDetails = Array.isArray(message.additional_kwargs?.toolDetails)
+      ? message.additional_kwargs.toolDetails
+      : [];
+
     const structured = parseAssistantStructuredValues(message.content);
+    const values: ChatItemValueItemType[] = [];
+
+    if (toolDetails.length > 0) {
+      const tools = toolDetails
+        .map((tool) => toToolItem(tool))
+        .filter((tool) => Boolean(tool.toolName));
+      if (tools.length > 0) {
+        values.push({
+          type: ChatItemValueTypeEnum.tool,
+          tools,
+        });
+      }
+    }
+
     if (structured && structured.length > 0) {
-      return structured;
+      values.push(...structured);
+      return values;
     }
 
     const text = extractText(message.content);
-    if (!text.trim()) {
-      return [];
-    }
-
-    return [
-      {
+    if (text.trim()) {
+      values.push({
         type: ChatItemValueTypeEnum.text,
         text: { content: text },
-      },
-    ];
+      });
+    }
+
+    return values;
   }
 
   const text = extractText(message.content);

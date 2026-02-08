@@ -19,8 +19,6 @@ import ChatItem from "./ChatItem";
 import ExecutionSummaryRow from "./ExecutionSummaryRow";
 
 import type { ConversationMessage } from "@/types/conversation";
-import { useSystemStore } from "@/web/common/system/useSystemStore";
-import { postStopV2Chat } from "@/web/core/chat/api";
 
 const normalizeStreamContent = (content: unknown) => {
   const text = extractText(content);
@@ -49,6 +47,15 @@ const TEXT_FILE_EXTENSIONS = [
 ] as const;
 const MAX_TEXT_FILE_SIZE = 200 * 1024;
 const MAX_TEXT_FILE_PREVIEW = 3000;
+const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024;
+
+interface UploadedFileArtifact {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+  storagePath: string;
+}
 
 interface ToolStreamPayload {
   id?: string;
@@ -60,6 +67,12 @@ interface ToolStreamPayload {
 interface WorkflowDurationPayload {
   durationSeconds?: number;
 }
+
+const buildConversationTitle = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > 40 ? `${trimmed.slice(0, 40)}...` : trimmed;
+};
 
 const isTextLikeFile = (file: File) => {
   if (file.type.startsWith("text/")) return true;
@@ -103,6 +116,61 @@ const toFileArtifacts = (files: ChatInputFile[]) =>
     lastModified: item.file.lastModified,
   }));
 
+const fileToBase64 = async (file: File) => {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
+const uploadChatFiles = async ({
+  token,
+  chatId,
+  files,
+}: {
+  token: string;
+  chatId: string;
+  files: ChatInputFile[];
+}): Promise<UploadedFileArtifact[]> => {
+  const uploadable = files.filter((item) => item.file.size <= MAX_UPLOAD_FILE_SIZE);
+  if (uploadable.length === 0) return [];
+
+  const payload = await Promise.all(
+    uploadable.map(async (item) => ({
+      name: item.file.name,
+      type: item.file.type,
+      lastModified: item.file.lastModified,
+      contentBase64: await fileToBase64(item.file),
+    }))
+  );
+
+  const response = await fetch("/api/core/chat/files/upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...withAuthHeaders(),
+    },
+    body: JSON.stringify({
+      token,
+      chatId,
+      files: payload,
+    }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(typeof data?.error === "string" ? data.error : "上传失败");
+  }
+
+  const data = (await response.json()) as { files?: UploadedFileArtifact[] };
+  return Array.isArray(data.files) ? data.files : [];
+};
+
 const ChatPanel = ({
   token,
   onFilesUpdated,
@@ -124,6 +192,7 @@ const ChatPanel = ({
     loadConversation,
     deleteConversation,
     deleteAllConversations,
+    updateConversationTitle,
   } = useConversations(token, router);
 
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -134,7 +203,6 @@ const ChatPanel = ({
   const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string; icon?: string }>>([
     { value: "agent", label: "agent" },
   ]);
-  const llmModelList = useSystemStore((state) => state.llmModelList);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
@@ -151,11 +219,9 @@ const ChatPanel = ({
         if (!active) return;
         const options = catalog.models.length
           ? catalog.models.map((item) => {
-              const matched = llmModelList.find((modelItem) => modelItem.model === item.id);
               return {
                 value: item.id,
-                icon: matched?.avatar,
-                label: matched?.name || item.label || item.id,
+                label: item.label || item.id,
               };
             })
           : [{ value: catalog.defaultModel || catalog.toolCallModel || "agent", label: catalog.defaultModel || catalog.toolCallModel || "agent" }];
@@ -176,7 +242,7 @@ const ChatPanel = ({
     return () => {
       active = false;
     };
-  }, [llmModelList]);
+  }, []);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -193,6 +259,17 @@ const ChatPanel = ({
 
       const filePrompt = await buildFilePrompt(payload.files);
       const displayText = text || `已上传 ${payload.files.length} 个文件`;
+      const nextConversationTitle = buildConversationTitle(text);
+      const uploadedFiles =
+        payload.files.length > 0 && conversationId
+          ? await uploadChatFiles({ token, chatId: conversationId, files: payload.files }).catch(
+              () => []
+            )
+          : [];
+
+      if (conversationId && nextConversationTitle) {
+        updateConversationTitle(conversationId, nextConversationTitle);
+      }
 
       const userMessage: ConversationMessage = {
         role: "user",
@@ -201,7 +278,7 @@ const ChatPanel = ({
         artifact:
           payload.files.length > 0
             ? {
-                files: toFileArtifacts(payload.files),
+                files: uploadedFiles.length > 0 ? uploadedFiles : toFileArtifacts(payload.files),
               }
             : undefined,
         additional_kwargs: filePrompt
@@ -251,39 +328,34 @@ const ChatPanel = ({
           id: string,
           nextPartial: { toolName?: string; params?: string; response?: string }
         ) => {
-          setMessages((prev) => {
-            const index = prev.findIndex((item) => item.id === id);
-            const existing = index >= 0 ? prev[index] : undefined;
-            let base = { toolName: nextPartial.toolName, params: "", response: "" };
-            if (existing?.content) {
-              try {
-                const parsed = JSON.parse(String(existing.content));
-                base = { ...base, ...parsed };
-              } catch {
-                // ignore parse failure
-              }
-            }
+          updateAssistantMetadata((current) => {
+            const list = Array.isArray(current.toolDetails)
+              ? (current.toolDetails as Array<{
+                  id?: string;
+                  toolName?: string;
+                  params?: string;
+                  response?: string;
+                }>)
+              : [];
+            const index = list.findIndex((item) => item.id === id);
+            const base = index >= 0 ? list[index] : { id, params: "", response: "" };
             const merged = {
+              ...base,
+              id,
               toolName: nextPartial.toolName ?? base.toolName,
-              params: (base.params || "") + (nextPartial.params || ""),
+              params: `${base.params || ""}${nextPartial.params || ""}`,
               response: nextPartial.response ?? base.response,
             };
-            const msg: ConversationMessage = {
-              role: "tool",
-              content: JSON.stringify(merged),
-              id,
-              name: merged.toolName,
-            };
+            const next = [...list];
             if (index >= 0) {
-              const next = [...prev];
-              next[index] = msg;
-              return next;
+              next[index] = merged;
+            } else {
+              next.push(merged);
             }
-            const insertAt = prev.findIndex((item) => item.id === assistantMessageId);
-            if (insertAt === -1) return [...prev, msg];
-            const next = [...prev];
-            next.splice(insertAt, 0, msg);
-            return next;
+            return {
+              ...current,
+              toolDetails: next,
+            };
           });
         };
 
@@ -397,7 +469,15 @@ const ChatPanel = ({
         setIsSending(false);
       }
     },
-    [activeConversation?.id, ensureConversation, isSending, model, onFilesUpdated, token]
+    [
+      activeConversation?.id,
+      ensureConversation,
+      isSending,
+      model,
+      onFilesUpdated,
+      token,
+      updateConversationTitle,
+    ]
   );
 
   const handleStop = useCallback(async () => {
@@ -406,7 +486,14 @@ const ChatPanel = ({
     if (!chatId || !abortCtrl) return;
 
     try {
-      await postStopV2Chat({ token, chatId });
+      await fetch("/api/v2/chat/stop", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...withAuthHeaders(),
+        },
+        body: JSON.stringify({ token, chatId }),
+      });
     } catch {
       // ignore stop API errors and still abort local stream
     } finally {

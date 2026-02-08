@@ -1,1 +1,1 @@
-export { i18nT } from '@/web/i18n/utils';
+export const i18nT = (key: string) => key;

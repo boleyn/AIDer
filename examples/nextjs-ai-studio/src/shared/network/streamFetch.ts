@@ -31,6 +31,27 @@ type StreamFetchProps = {
   headers?: HeadersInit;
 };
 
+const normalizeHeaders = (headers?: HeadersInit): Record<string, string> => {
+  const output: Record<string, string> = {};
+  if (!headers) return output;
+  if (Array.isArray(headers)) {
+    headers.forEach(([key, value]) => {
+      output[key] = value;
+    });
+    return output;
+  }
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      output[key] = value;
+    });
+    return output;
+  }
+  Object.entries(headers).forEach(([key, value]) => {
+    output[key] = String(value);
+  });
+  return output;
+};
+
 export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: StreamFetchProps) =>
   new Promise<{ responseText: string }>(async (resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -91,7 +112,7 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: Stream
     try {
       await fetchEventSource(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(headers || {}) },
+        headers: { "Content-Type": "application/json", ...normalizeHeaders(headers) },
         signal: abortCtrl.signal,
         body: JSON.stringify(data),
         async onopen(res) {

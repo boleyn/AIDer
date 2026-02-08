@@ -9,7 +9,10 @@ export type AuthTokenPayload = {
 
 export const getJwtSecret = () => process.env.JWT_SECRET || FALLBACK_SECRET;
 
-export const signAuthToken = (payload: AuthTokenPayload, expiresIn = "7d") =>
+export const signAuthToken = (
+  payload: AuthTokenPayload,
+  expiresIn: jwt.SignOptions["expiresIn"] = "7d"
+) =>
   jwt.sign(payload, getJwtSecret(), { expiresIn });
 
 export const verifyAuthToken = (token: string): JwtPayload & AuthTokenPayload => {

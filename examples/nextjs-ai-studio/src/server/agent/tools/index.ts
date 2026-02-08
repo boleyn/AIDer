@@ -55,7 +55,7 @@ const toJsonSchema = (schema: z.ZodTypeAny): Record<string, unknown> => {
 const safeParse = <T>(schema: z.ZodTypeAny, input: unknown): { ok: true; data: T } | { ok: false; error: string } => {
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors.map((err) => err.message).join("; ") };
+    return { ok: false, error: parsed.error.issues.map((err) => err.message).join("; ") };
   }
   return { ok: true, data: parsed.data as T };
 };
@@ -142,7 +142,7 @@ export function createProjectTools(token: string, changeTracker: ChangeTracker):
       run: async (input) => {
         const parsed = globalToolSchema.safeParse(input);
         if (!parsed.success) {
-          throw new Error(parsed.error.errors.map((err) => err.message).join("; "));
+          throw new Error(parsed.error.issues.map((err) => err.message).join("; "));
         }
         return runGlobalAction(token, parsed.data as GlobalToolInput, changeTracker);
       },

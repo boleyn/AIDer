@@ -116,6 +116,99 @@ const normalizeStoredMessages = (messages: ConversationMessage[]) => {
   return result.reverse();
 };
 
+const toStringValue = (value: unknown) => {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const mergeAssistantToolMessages = (messages: ConversationMessage[]): ConversationMessage[] => {
+  const output: ConversationMessage[] = [];
+  const pendingCalls = new Map<string, { toolName?: string; params?: string }>();
+
+  const appendToolToLastAssistant = (tool: {
+    id?: string;
+    toolName?: string;
+    params?: string;
+    response?: string;
+  }) => {
+    for (let i = output.length - 1; i >= 0; i -= 1) {
+      if (output[i].role !== "assistant") continue;
+      const current = output[i];
+      const kwargs =
+        current.additional_kwargs && typeof current.additional_kwargs === "object"
+          ? current.additional_kwargs
+          : {};
+      const toolDetails = Array.isArray(kwargs.toolDetails) ? kwargs.toolDetails : [];
+      output[i] = {
+        ...current,
+        additional_kwargs: {
+          ...kwargs,
+          toolDetails: [...toolDetails, tool],
+        },
+      };
+      return;
+    }
+  };
+
+  for (const message of messages) {
+    if (message.role === "assistant") {
+      if (Array.isArray(message.tool_calls)) {
+        for (const call of message.tool_calls) {
+          if (!call?.id) continue;
+          pendingCalls.set(call.id, {
+            toolName: call.function?.name,
+            params: call.function?.arguments || "",
+          });
+        }
+      }
+      output.push(message);
+      continue;
+    }
+
+    if (message.role === "tool") {
+      let parsed: unknown = null;
+      if (typeof message.content === "string") {
+        try {
+          parsed = JSON.parse(message.content || "{}");
+        } catch {
+          parsed = null;
+        }
+      }
+      const parsedObj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+      const toolId =
+        message.tool_call_id ||
+        (typeof parsedObj.id === "string" ? parsedObj.id : undefined) ||
+        message.id;
+      const pending = toolId ? pendingCalls.get(toolId) : undefined;
+      appendToolToLastAssistant({
+        id: toolId,
+        toolName:
+          message.name ||
+          (typeof parsedObj.toolName === "string" ? parsedObj.toolName : undefined) ||
+          pending?.toolName ||
+          "工具",
+        params:
+          (typeof parsedObj.params === "string" ? parsedObj.params : undefined) ||
+          pending?.params ||
+          "",
+        response:
+          (typeof parsedObj.response === "string" ? parsedObj.response : undefined) ||
+          toStringValue(message.content),
+      });
+      continue;
+    }
+
+    output.push(message);
+  }
+
+  return output;
+};
+
 const getTitleFromMessages = (messages: ConversationMessage[]): string | undefined => {
   const lastUser = [...messages].reverse().find((message) => message.role === "user");
   if (!lastUser) return undefined;
@@ -195,10 +288,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const conversation = conversationId ? await getConversation(token, conversationId) : null;
-  if (conversationId && !conversation) {
-    res.status(404).json({ error: "对话不存在" });
-    return;
-  }
 
   const historyMessages = conversation?.messages ?? [];
   const newMessages = incomingMessages.map((message) => ({
@@ -447,8 +536,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (conversationId) {
-    const storedMessages = normalizeStoredMessages(
+    const storedMessages = mergeAssistantToolMessages(
+      normalizeStoredMessages(
       runResult.completeMessages.map(chatCompletionMessageToConversationMessage)
+      )
     );
 
     const assistantIndex = (() => {
@@ -475,7 +566,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     }
 
-    const nextTitle = getTitleFromMessages(storedMessages);
+    const nextTitle = getTitleFromMessages(storedMessages) || getTitleFromMessages(contextMessages);
     await replaceConversationMessages(token, conversationId, storedMessages, nextTitle);
   }
 
