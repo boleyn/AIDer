@@ -30,7 +30,7 @@ import type {
 } from '@/global/core/workflow/template/system/interactive/type';
 import { isEqual } from 'lodash';
 import { useTranslation } from 'next-i18next';
-import { eventBus, EventNameEnum } from '@/web/common/utils/eventbus';
+import { eventBus, EventNameEnum } from '@/shared/utils/eventbus';
 import { SelectOptionsComponent, FormInputComponent } from './Interactive/InteractiveComponents';
 import { useContextSelector } from 'use-context-selector';
 import { useCreation } from 'ahooks';

@@ -12,7 +12,7 @@ import InputRender from '@/components/core/app/formRender';
 import { nodeInputTypeToInputType } from '@/components/core/app/formRender/utils';
 import FormLabel from '@/components/common/MyBox/FormLabel';
 import LeftRadio from '@/components/common/Radio/LeftRadio';
-import { getPresignedChatFileGetUrl } from '@/web/common/file/api';
+import { getPresignedChatFileGetUrl } from '@/shared/api/chatFile';
 import { useContextSelector } from 'use-context-selector';
 import { WorkflowRuntimeContext } from '@/components/core/chat/ChatContainer/context/workflowRuntimeContext';
 import { useTranslation } from 'next-i18next';

@@ -22,11 +22,8 @@
       "@server/*": ["./src/server/*"],
       "@features/*": ["./src/features/*"],
       "@components/*": ["./src/components/*"],
-      "@web/*": ["./src/web/*"],
       "@shared/*": ["./src/shared/*"],
       "@fastgpt/global/*": ["./src/global/*", "./src/ai/compat/global/*"],
-      "@fastgpt/web/common/zustand": ["./src/web/common/zustand.ts"],
-      "@fastgpt/web/hooks/useRequest": ["./src/web/common/hooks/useRequest.tsx"],
       "@fastgpt/web/styles/theme": ["./src/styles/theme.ts"]
     }
   },
@@ -45,6 +42,7 @@
     "src/hooks/**/*.ts",
     "src/hooks/**/*.tsx",
     "src/types/**/*.ts",
+    "src/types/**/*.d.ts",
     "src/global/**/*.ts",
     "src/global/**/*.tsx"
   ],

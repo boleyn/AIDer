@@ -6,16 +6,18 @@ export enum EventNameEnum {
   refreshFeedback = 'refreshFeedback'
 }
 
+type EventHandler = (data?: Record<string, unknown>) => void;
+
 export const eventBus = {
-  list: new Map<EventNameEnum, Function>(),
-  on: function (name: EventNameEnum, fn: Function) {
+  list: new Map<EventNameEnum, EventHandler>(),
+  on(name: EventNameEnum, fn: EventHandler) {
     this.list.set(name, fn);
   },
-  emit: function (name: EventNameEnum, data: Record<string, any> = {}) {
+  emit(name: EventNameEnum, data: Record<string, unknown> = {}) {
     const fn = this.list.get(name);
-    fn && fn(data);
+    if (fn) fn(data);
   },
-  off: function (name: EventNameEnum) {
+  off(name: EventNameEnum) {
     this.list.delete(name);
   }
 };

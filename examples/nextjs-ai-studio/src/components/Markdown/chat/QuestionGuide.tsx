@@ -3,7 +3,7 @@ import { Box, Flex, useTheme } from '@chakra-ui/react';
 import 'katex/dist/katex.min.css';
 import ChatBoxDivider from '@/components/core/chat/Divider';
 import { useTranslation } from 'next-i18next';
-import { EventNameEnum, eventBus } from '@/web/common/utils/eventbus';
+import { EventNameEnum, eventBus } from '@/shared/utils/eventbus';
 import MyTooltip from '@/components/common/MyTooltip';
 import MyIcon from '@/components/common/MyIcon';
 

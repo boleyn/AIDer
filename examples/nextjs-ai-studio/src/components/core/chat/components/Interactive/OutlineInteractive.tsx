@@ -17,7 +17,7 @@ import {
 import MyIcon from '@/components/common/MyIcon';
 import { useCopyData } from '@/hooks/useCopyData';
 import type { InteractiveBasicType } from '@/global/core/workflow/template/system/interactive/type';
-import { eventBus, EventNameEnum } from '@/web/common/utils/eventbus';
+import { eventBus, EventNameEnum } from '@/shared/utils/eventbus';
 import { useTranslation } from 'next-i18next';
 
 type OutlineInteractiveType = InteractiveBasicType & {

@@ -1,4 +1,4 @@
-import { eventBus, EventNameEnum } from '@/web/common/utils/eventbus';
+import { eventBus, EventNameEnum } from '@/shared/utils/eventbus';
 import { Button, Link } from '@chakra-ui/react';
 import MyIcon from '@/components/common/MyIcon';
 import MyTooltip from '@/components/common/MyTooltip';
