@@ -164,6 +164,28 @@ const uploadChatFiles = async ({
   return Array.isArray(data.files) ? data.files : [];
 };
 
+const toUpdatedFilesMap = (value: unknown): Record<string, { code: string }> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return null;
+
+  const normalized: Record<string, { code: string }> = {};
+  for (const [path, file] of entries) {
+    if (!path || typeof path !== "string") return null;
+    if (!file || typeof file !== "object" || Array.isArray(file)) return null;
+
+    const code = (file as { code?: unknown }).code;
+    if (typeof code !== "string") return null;
+
+    normalized[path] = { code };
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+};
+
 const ChatPanel = ({
   token,
   onFilesUpdated,
@@ -446,9 +468,10 @@ const ChatPanel = ({
               if (streamPayload.response && onFilesUpdated) {
                 try {
                   const parsed = JSON.parse(streamPayload.response);
-                  const files =
+                  const filesCandidate =
                     (parsed as { files?: Record<string, { code: string }> }).files ||
                     (parsed as { data?: { files?: Record<string, { code: string }> } }).data?.files;
+                  const files = toUpdatedFilesMap(filesCandidate);
                   if (files && typeof files === "object") {
                     onFilesUpdated(files);
                   }
