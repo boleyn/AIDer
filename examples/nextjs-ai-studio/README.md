@@ -83,6 +83,8 @@ MCP_SERVER_URLS=[{"name":"mcp-private","url":"https://example.com/sse","headers"
 
 你可以把 API Route 替换成真实的后端逻辑（数据库 / Git / 对象存储）。
 
+当前默认实现：项目元数据存 MongoDB（`projects` 集合），项目文件内容存本地目录 `data/projects/<token>/`。
+
 ## 登录鉴权与飞书快捷登录
 
 本示例已加入账号登录/注册与飞书快捷登录：
