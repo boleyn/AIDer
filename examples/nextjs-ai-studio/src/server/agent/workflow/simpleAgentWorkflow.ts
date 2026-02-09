@@ -22,6 +22,7 @@ interface RunSimpleAgentWorkflowInput {
   stream: boolean;
   recursionLimit: number;
   temperature: number;
+  toolChoice?: "auto" | "required";
   messages: ChatCompletionMessageParam[];
   allTools: AgentToolDefinition[];
   tools: ChatCompletionTool[];
@@ -66,6 +67,7 @@ export const runSimpleAgentWorkflow = async ({
   stream,
   recursionLimit,
   temperature,
+  toolChoice,
   messages,
   allTools,
   tools,
@@ -83,6 +85,7 @@ export const runSimpleAgentWorkflow = async ({
       tools,
       temperature,
       stream,
+      tool_choice: toolChoice,
       toolCallMode: "toolChoice",
     },
     isAborted: () => abortSignal?.aborted,
@@ -124,8 +127,8 @@ export const runSimpleAgentWorkflow = async ({
         };
       }
 
-      const tool = allTools.find((item) => item.name === call.function.name);
       const startAt = Date.now();
+      const tool = allTools.find((item) => item.name === call.function.name);
       let response = "";
       let status: "success" | "error" = "success";
 

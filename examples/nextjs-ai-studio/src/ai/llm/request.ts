@@ -21,7 +21,6 @@ import { removeDatasetCiteText } from '@aistudio/ai/compat/global/core/ai/llm/ut
 import { getAIApi } from '@aistudio/ai/config';
 import type { OpenaiAccountType } from '@aistudio/ai/compat/global/support/user/team/type';
 import { getNanoid } from '@aistudio/ai/compat/global/common/string/tools';
-import { parsePromptToolCall, promptToolCallMessageRewrite } from './promptCall';
 import { getLLMModel } from '@aistudio/ai/model';
 import { ChatCompletionRequestMessageRoleEnum } from '@aistudio/ai/compat/global/core/ai/constants';
 import { countGptMessagesTokens } from '@aistudio/ai/compat/common/string/tiktoken/index';
@@ -111,12 +110,7 @@ export const createLLMResponse = async <T extends CompletionsBodyType>(
     origin: requestOrigin
   });
   // Message process
-  const rewriteMessages = (() => {
-    if (tools?.length && toolCallMode === 'prompt') {
-      return promptToolCallMessageRewrite(requestMessages, tools);
-    }
-    return requestMessages;
-  })();
+  const rewriteMessages = requestMessages;
 
   const cacheControlMessages = (() => {
     if (!aiChatPromptCache) return rewriteMessages;
@@ -350,209 +344,125 @@ export const createStreamResponse = async ({
   const { parsePart, getResponseData, updateFinishReason, updateError } = parseLLMStreamResponse();
 
   if (tools?.length) {
-    if (toolCallMode === 'toolChoice') {
-      const stripDefaultApiPrefix = (name: string) =>
-        name.startsWith('default_api:') ? name.slice('default_api:'.length) : name;
-      let callingTool: {
-        id?: string;
-        name: string;
-        arguments: string;
-      } | null = null;
-      const toolCalls: ChatCompletionMessageToolCall[] = [];
+    const stripDefaultApiPrefix = (name: string) =>
+      name.startsWith('default_api:') ? name.slice('default_api:'.length) : name;
+    let callingTool: {
+      id?: string;
+      name: string;
+      arguments: string;
+    } | null = null;
+    const toolCalls: ChatCompletionMessageToolCall[] = [];
 
-      try {
-        for await (const part of response) {
-          if (isAborted?.()) {
-            response.controller?.abort();
-            updateFinishReason('stop');
-            break;
-          }
-
-          const { reasoningContent, responseContent } = parsePart({
-            part,
-            parseThinkTag: (modelData as any).reasoning,
-            retainDatasetCite
-          });
-
-          if (reasoningContent) {
-            onReasoning?.({ text: reasoningContent });
-          }
-          if (responseContent) {
-            onStreaming?.({ text: responseContent });
-          }
-
-          const responseChoice = part.choices?.[0]?.delta;
-
-          // Parse tool calls
-          if (responseChoice?.tool_calls?.length) {
-            responseChoice.tool_calls.forEach((toolCall: any, i: number) => {
-              const index = toolCall.index ?? i;
-
-              // Call new tool
-              const hasNewTool = toolCall?.function?.name || callingTool;
-              if (hasNewTool) {
-                // Call new tool
-                if (toolCall?.function?.name) {
-                  callingTool = {
-                    id: toolCall.id,
-                    name: toolCall.function?.name || '',
-                    arguments: toolCall.function?.arguments || ''
-                  };
-                } else if (callingTool) {
-                  // Continue call(Perhaps the name of the previous function was incomplete)
-                  callingTool.name += toolCall.function?.name || '';
-                  callingTool.arguments += toolCall.function?.arguments || '';
-                }
-
-                // New tool, add to list.
-                const toolName = callingTool!.name;
-                const normalizedToolName = stripDefaultApiPrefix(toolName);
-                const filteredTools = tools.filter(
-                  (
-                    item
-                  ): item is ChatCompletionTool & {
-                    type: 'function';
-                    function: { name: string; description?: string; parameters?: any };
-                  } => {
-                    return (
-                      item.type === 'function' && 'function' in item && item.function !== undefined
-                    );
-                  }
-                );
-                const matchTool =
-                  filteredTools.find((item) => item.function.name === toolName) ||
-                  filteredTools.find((item) => item.function.name === normalizedToolName);
-                if (matchTool) {
-                  const call: ChatCompletionMessageToolCall = {
-                    id: callingTool?.id || getNanoid(),
-                    type: 'function',
-                    function: {
-                      name: toolName || matchTool.function.name,
-                      arguments: callingTool!.arguments
-                    } as ChatCompletionMessageToolCall['function']
-                  };
-                  addLog.info('[LLM ToolCall][stream]', {
-                    id: call.id,
-                    name: call.function?.name
-                  });
-                  toolCalls[index] = call;
-                  onToolCall?.({ call });
-                  callingTool = null;
-                }
-              } else {
-                /* arg 追加到当前工具的参数里 */
-                const arg: string = toolCall?.function?.arguments ?? '';
-                const currentTool = toolCalls[index];
-                if (
-                  currentTool &&
-                  arg &&
-                  currentTool.type === 'function' &&
-                  'function' in currentTool &&
-                  currentTool.function
-                ) {
-                  const toolWithFunction = currentTool as ChatCompletionMessageToolCall & {
-                    type: 'function';
-                    function: { name: string; arguments: string };
-                  };
-                  toolWithFunction.function.arguments += arg;
-
-                  onToolParam?.({ tool: currentTool, params: arg });
-                }
-              }
-            });
-          }
+    try {
+      for await (const part of response) {
+        if (isAborted?.()) {
+          response.controller?.abort();
+          updateFinishReason('stop');
+          break;
         }
-      } catch (error: any) {
-        updateError(error?.error || error);
-      }
 
-      const { reasoningContent, content, finish_reason, usage, error } = getResponseData();
+        const { reasoningContent, responseContent } = parsePart({
+          part,
+          parseThinkTag: (modelData as any).reasoning,
+          retainDatasetCite
+        });
 
-      return {
-        error,
-        answerText: content,
-        reasoningText: reasoningContent,
-        finish_reason,
-        usage,
-        toolCalls: toolCalls.filter((call) => !!call)
-      };
-    } else {
-      let startResponseWrite = false;
-      let answer = '';
+        if (reasoningContent) {
+          onReasoning?.({ text: reasoningContent });
+        }
+        if (responseContent) {
+          onStreaming?.({ text: responseContent });
+        }
 
-      try {
-        for await (const part of response) {
-          if (isAborted?.()) {
-            response.controller?.abort();
-            updateFinishReason('stop');
-            break;
-          }
+        const responseChoice = part.choices?.[0]?.delta;
 
-          const { reasoningContent, content, responseContent } = parsePart({
-            part,
-            parseThinkTag: (modelData as any).reasoning,
-            retainDatasetCite
-          });
-          answer += content;
+        if (responseChoice?.tool_calls?.length) {
+          responseChoice.tool_calls.forEach((toolCall: any, i: number) => {
+            const index = toolCall.index ?? i;
 
-          if (reasoningContent) {
-            onReasoning?.({ text: reasoningContent });
-          }
-
-          if (content) {
-            if (startResponseWrite) {
-              if (responseContent) {
-                onStreaming?.({ text: responseContent });
+            const hasNewTool = toolCall?.function?.name || callingTool;
+            if (hasNewTool) {
+              if (toolCall?.function?.name) {
+                callingTool = {
+                  id: toolCall.id,
+                  name: toolCall.function?.name || '',
+                  arguments: toolCall.function?.arguments || ''
+                };
+              } else if (callingTool) {
+                callingTool.name += toolCall.function?.name || '';
+                callingTool.arguments += toolCall.function?.arguments || '';
               }
-            } else if (answer.length >= 3) {
-              answer = answer.trimStart();
 
-              // Not call tool
-              if (/0(:|：)/.test(answer)) {
-                startResponseWrite = true;
-
-                // find first : index
-                const firstIndex =
-                  answer.indexOf('0:') !== -1 ? answer.indexOf('0:') : answer.indexOf('0：');
-                answer = answer.substring(firstIndex + 2).trim();
-
-                onStreaming?.({ text: answer });
+              const toolName = callingTool!.name;
+              const normalizedToolName = stripDefaultApiPrefix(toolName);
+              const filteredTools = tools.filter(
+                (
+                  item
+                ): item is ChatCompletionTool & {
+                  type: 'function';
+                  function: { name: string; description?: string; parameters?: any };
+                } => {
+                  return (
+                    item.type === 'function' && 'function' in item && item.function !== undefined
+                  );
+                }
+              );
+              const matchTool =
+                filteredTools.find((item) => item.function.name === toolName) ||
+                filteredTools.find((item) => item.function.name === normalizedToolName);
+              if (matchTool) {
+                const call: ChatCompletionMessageToolCall = {
+                  id: callingTool?.id || getNanoid(),
+                  type: 'function',
+                  function: {
+                    name: toolName || matchTool.function.name,
+                    arguments: callingTool!.arguments
+                  } as ChatCompletionMessageToolCall['function']
+                };
+                addLog.info('[LLM ToolCall][stream]', {
+                  id: call.id,
+                  name: call.function?.name
+                });
+                toolCalls[index] = call;
+                onToolCall?.({ call });
+                callingTool = null;
               }
-              // Not response tool
-              else if (/1(:|：)/.test(answer)) {
-              }
-              // Not start 1/0, start response
-              else {
-                startResponseWrite = true;
-                onStreaming?.({ text: answer });
+            } else {
+              const arg: string = toolCall?.function?.arguments ?? '';
+              const currentTool = toolCalls[index];
+              if (
+                currentTool &&
+                arg &&
+                currentTool.type === 'function' &&
+                'function' in currentTool &&
+                currentTool.function
+              ) {
+                const toolWithFunction = currentTool as ChatCompletionMessageToolCall & {
+                  type: 'function';
+                  function: { name: string; arguments: string };
+                };
+                toolWithFunction.function.arguments += arg;
+
+                onToolParam?.({ tool: currentTool, params: arg });
               }
             }
-          }
+          });
         }
-      } catch (error: any) {
-        updateError(error?.error || error);
       }
-
-      const { reasoningContent, content, finish_reason, usage, error } = getResponseData();
-      const { answer: llmAnswer, streamAnswer, toolCalls } = parsePromptToolCall(content);
-
-      if (streamAnswer) {
-        onStreaming?.({ text: streamAnswer });
-      }
-
-      toolCalls?.forEach((call) => {
-        onToolCall?.({ call });
-      });
-
-      return {
-        error,
-        answerText: llmAnswer,
-        reasoningText: reasoningContent,
-        finish_reason,
-        usage,
-        toolCalls
-      };
+    } catch (error: any) {
+      updateError(error?.error || error);
     }
+
+    const { reasoningContent, content, finish_reason, usage, error } = getResponseData();
+
+    return {
+      error,
+      answerText: content,
+      reasoningText: reasoningContent,
+      finish_reason,
+      usage,
+      toolCalls: toolCalls.filter((call) => !!call)
+    };
   } else {
     // Not use tool
     try {
@@ -599,7 +509,7 @@ export const createCompleteResponse = async ({
   onReasoning,
   onToolCall
 }: CompleteParams & { response: ChatCompletion }): Promise<CompleteResponse> => {
-  const { tools, toolCallMode = 'toolChoice', retainDatasetCite = true } = body;
+  const { tools, retainDatasetCite = true } = body;
   const modelData = getLLMModel(String(body.model));
 
   const finish_reason = response.choices?.[0]?.finish_reason as CompletionFinishReason;
@@ -631,18 +541,8 @@ export const createCompleteResponse = async ({
   // Tool parse
   const { toolCalls } = (() => {
     if (tools?.length) {
-      if (toolCallMode === 'toolChoice') {
-        return {
-          toolCalls: response.choices?.[0]?.message?.tool_calls || []
-        };
-      }
-
-      // Prompt call
-      const { answer, toolCalls } = parsePromptToolCall(formatContent);
-      formatContent = answer;
-
       return {
-        toolCalls
+        toolCalls: response.choices?.[0]?.message?.tool_calls || []
       };
     }
 
@@ -714,7 +614,7 @@ type LLMRequestBodyType<T> = Omit<
 
   // Custom field
   retainDatasetCite?: boolean;
-  toolCallMode?: 'toolChoice' | 'prompt';
+  toolCallMode?: 'toolChoice';
   useVision?: boolean;
   aiChatPromptCache?: boolean;
   requestOrigin?: string;

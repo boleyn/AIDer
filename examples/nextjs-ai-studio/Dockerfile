@@ -33,6 +33,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.js ./next.config.js
+COPY --from=builder /app/skills ./skills
+COPY --from=builder /app/AGENTS.md ./AGENTS.md
 
 EXPOSE 3000
 CMD ["node_modules/.bin/next", "start", "-p", "3000"]

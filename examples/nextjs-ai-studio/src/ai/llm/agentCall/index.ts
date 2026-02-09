@@ -211,7 +211,7 @@ export const runAgentCall = async ({
         model,
         messages: requestMessages,
         tool_choice: 'auto',
-        toolCallMode: modelData.toolChoice ? 'toolChoice' : 'prompt',
+        toolCallMode: 'toolChoice',
         tools,
         parallel_tool_calls: true
       },

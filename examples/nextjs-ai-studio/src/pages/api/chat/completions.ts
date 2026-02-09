@@ -5,6 +5,7 @@ import { loadMcpTools } from "@server/agent/mcpClient";
 import { getAgentRuntimeConfig } from "@server/agent/runtimeConfig";
 import { createProjectTools } from "@server/agent/tools";
 import { runSimpleAgentWorkflow } from "@server/agent/workflow/simpleAgentWorkflow";
+import { getAgentRuntimeSkillPrompt } from "@server/agent/skillPrompt";
 import { getChatModelCatalog } from "@server/aiProxy/modelCatalog";
 import { requireAuth } from "@server/auth/session";
 import {
@@ -238,6 +239,18 @@ const isModelUnavailableError = (error: unknown) => {
   return /does not exist|do not have access|model.*not found/i.test(text);
 };
 
+const shouldRequireToolChoice = (messages: ConversationMessage[]) => {
+  const lastUser = [...messages].reverse().find((message) => message.role === "user");
+  if (!lastUser) return false;
+
+  const text = extractText(lastUser.content).trim().toLowerCase();
+  if (!text) return false;
+
+  return /(改|修改|修复|重构|实现|加个|排查|debug|fix|refactor|implement|code|代码|文件|函数|接口|api|bug|报错)/i.test(
+    text
+  );
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -443,6 +456,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     },
   }));
 
+  console.info("[agent-skill] tools", {
+    totalTools: tools.length,
+    toolNames: tools.map((tool) => tool.function.name),
+  });
+
   const toAgentMessages = (messages: ConversationMessage[]): ChatCompletionMessageParam[] =>
     messages.map((message) => {
       const baseText = extractText(message.content);
@@ -466,6 +484,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     }) as ChatCompletionMessageParam[];
 
+  const skillPrompt = await getAgentRuntimeSkillPrompt();
+  const baseAgentMessages = toAgentMessages(contextMessages);
+  const requireToolChoice = shouldRequireToolChoice(contextMessages);
+  const agentMessages = skillPrompt
+    ? ([{ role: "system", content: skillPrompt }, ...baseAgentMessages] as ChatCompletionMessageParam[])
+    : baseAgentMessages;
+
+  console.info("[agent-skill] injection", {
+    enabled: Boolean(skillPrompt),
+    skillPromptLength: skillPrompt.length,
+    requireToolChoice,
+    baseMessageCount: baseAgentMessages.length,
+    finalMessageCount: agentMessages.length,
+    firstRole: agentMessages[0]?.role,
+  });
+
   if (stream) {
     startStream();
   }
@@ -486,7 +520,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       stream,
       recursionLimit: runtimeConfig.recursionLimit || 6,
       temperature: runtimeConfig.temperature,
-      messages: toAgentMessages(contextMessages),
+      messages: agentMessages,
+      toolChoice: requireToolChoice ? "required" : "auto",
       allTools,
       tools,
       abortSignal: workflowAbortController.signal,
