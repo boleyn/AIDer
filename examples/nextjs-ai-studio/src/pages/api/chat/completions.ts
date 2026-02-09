@@ -2,8 +2,10 @@ import type { ChatCompletionTool, ChatCompletionMessageParam } from "@aistudio/a
 import { formatGlobalResult } from "@server/agent/globalResultFormatter";
 import { parseGlobalCommand, runGlobalAction, type ChangeTracker } from "@server/agent/globalTools";
 import { loadMcpTools } from "@server/agent/mcpClient";
+import { BASE_CODING_AGENT_PROMPT } from "@server/agent/prompts/baseCodingAgentPrompt";
 import { getAgentRuntimeConfig } from "@server/agent/runtimeConfig";
 import { createProjectTools } from "@server/agent/tools";
+import type { AgentToolDefinition } from "@server/agent/tools/types";
 import { runSimpleAgentWorkflow } from "@server/agent/workflow/simpleAgentWorkflow";
 import { getAgentRuntimeSkillPrompt } from "@server/agent/skillPrompt";
 import { getChatModelCatalog } from "@server/aiProxy/modelCatalog";
@@ -239,16 +241,117 @@ const isModelUnavailableError = (error: unknown) => {
   return /does not exist|do not have access|model.*not found/i.test(text);
 };
 
-const shouldRequireToolChoice = (messages: ConversationMessage[]) => {
+const CODE_INTENT_PATTERN =
+  /(改|修改|修复|重构|实现|加个|排查|debug|fix|refactor|implement|code|代码|文件|函数|接口|api|bug|报错)/i;
+const TOOLING_INTENT_PATTERN =
+  /(写工具|工具开发|新增工具|两个工具|2个工具|build tool|create tool|tooling|tool|替换|replace|修改文件|write_file|replace_in_file)/i;
+
+const PROJECT_LOCAL_TOOL_NAMES = new Set([
+  "list_files",
+  "read_file",
+  "write_file",
+  "replace_in_file",
+  "search_in_files",
+  "global",
+]);
+
+type UserIntent = "tooling" | "coding" | "general";
+
+type ToolRouteResult = {
+  selectedTools: AgentToolDefinition[];
+  reason: string;
+};
+
+const getLastUserText = (messages: ConversationMessage[]) => {
   const lastUser = [...messages].reverse().find((message) => message.role === "user");
-  if (!lastUser) return false;
+  if (!lastUser) return "";
+  return extractText(lastUser.content).trim();
+};
 
-  const text = extractText(lastUser.content).trim().toLowerCase();
-  if (!text) return false;
+const detectUserIntent = (messages: ConversationMessage[]): UserIntent => {
+  const text = getLastUserText(messages).toLowerCase();
+  if (!text) return "general";
 
-  return /(改|修改|修复|重构|实现|加个|排查|debug|fix|refactor|implement|code|代码|文件|函数|接口|api|bug|报错)/i.test(
-    text
-  );
+  if (TOOLING_INTENT_PATTERN.test(text)) return "tooling";
+  if (CODE_INTENT_PATTERN.test(text)) return "coding";
+  return "general";
+};
+
+const routeToolsByIntent = (allTools: AgentToolDefinition[], intent: UserIntent): ToolRouteResult => {
+  if (intent === "tooling") {
+    const toolBuildTools = allTools.filter((tool) =>
+      ["list_files", "search_in_files", "read_file", "replace_in_file", "write_file", "global"].includes(tool.name)
+    );
+
+    if (toolBuildTools.length > 0) {
+      return {
+        selectedTools: toolBuildTools,
+        reason: "tooling_with_edit_tools",
+      };
+    }
+
+    const fallbackNonLocal = allTools.filter((tool) => !PROJECT_LOCAL_TOOL_NAMES.has(tool.name));
+    if (fallbackNonLocal.length > 0) {
+      return {
+        selectedTools: fallbackNonLocal,
+        reason: "tooling_with_non_local_tools",
+      };
+    }
+  }
+
+  if (intent === "coding") {
+    const codingTools = allTools.filter(
+      (tool) => PROJECT_LOCAL_TOOL_NAMES.has(tool.name) || tool.name.startsWith("mcp_mcp-gitlab-kb__")
+    );
+
+    if (codingTools.length > 0) {
+      return {
+        selectedTools: codingTools,
+        reason: "coding_with_project_tools",
+      };
+    }
+  }
+
+  return {
+    selectedTools: allTools,
+    reason: "fallback_all_tools",
+  };
+};
+
+const resolveToolChoice = (intent: UserIntent): "auto" | "required" => {
+  if (intent === "tooling") return "required";
+  if (intent === "coding") return "required";
+  return "auto";
+};
+
+const buildToolRoutingSystemPrompt = (
+  intent: UserIntent,
+  route: ToolRouteResult,
+  toolChoiceMode: "auto" | "required"
+) => {
+  const toolNames = route.selectedTools.map((tool) => tool.name).join(", ") || "(none)";
+  const intentRule =
+    intent === "tooling"
+      ? "Current task intent is tooling. Prefer replace_in_file/write_file/read_file/search_in_files/list_files and make concrete file edits."
+      : intent === "coding"
+      ? "Current task intent is coding. Prioritize project code tools and MCP KB tools. Read/search before write."
+      : "Current task intent is general. Use tools only when they materially improve correctness.";
+  const mandatoryRule =
+    toolChoiceMode === "required"
+      ? "- You must call at least one allowed tool before providing the final answer."
+      : "- Tool calls are optional; use them when needed for correctness.";
+
+  return [
+    "Runtime tool routing policy:",
+    `- intent: ${intent}`,
+    `- route_reason: ${route.reason}`,
+    `- tool_choice_mode: ${toolChoiceMode}`,
+    `- allowed_tools: ${toolNames}`,
+    `- ${intentRule}`,
+    "- Do not call tools outside allowed_tools.",
+    mandatoryRule,
+    "- Prefer the minimum number of tool calls needed to complete the task.",
+  ].join("\n");
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -427,6 +530,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const localTools = createProjectTools(token, tracker);
   const mcpTools = await loadMcpTools();
   const allTools = [...localTools, ...mcpTools];
+  const userIntent = detectUserIntent(contextMessages);
+  const routedTools = routeToolsByIntent(allTools, userIntent);
+  const selectedTools = routedTools.selectedTools;
+  const toolChoiceMode = selectedTools.length > 0 ? resolveToolChoice(userIntent) : "auto";
+  const toolRoutingPrompt = buildToolRoutingSystemPrompt(userIntent, routedTools, toolChoiceMode);
   const requestedModel = model && model !== "agent" ? model : runtimeConfig.toolCallModel;
   const catalog = await getChatModelCatalog().catch(() => ({
     models: [] as Array<{ id: string; label: string; source: "aiproxy" | "env" }>,
@@ -447,7 +555,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? catalog.defaultModel
       : catalog.models[0]?.id || requestedModel;
 
-  const tools: ChatCompletionTool[] = allTools.map((tool) => ({
+  const tools: ChatCompletionTool[] = selectedTools.map((tool) => ({
     type: "function",
     function: {
       name: tool.name,
@@ -457,7 +565,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }));
 
   console.info("[agent-skill] tools", {
+    userIntent,
+    routeReason: routedTools.reason,
     totalTools: tools.length,
+    totalCandidates: allTools.length,
+    toolChoiceMode,
     toolNames: tools.map((tool) => tool.function.name),
   });
 
@@ -484,17 +596,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     }) as ChatCompletionMessageParam[];
 
-  const skillPrompt = await getAgentRuntimeSkillPrompt();
+  const skillPrompt = userIntent === "general" ? "" : await getAgentRuntimeSkillPrompt();
   const baseAgentMessages = toAgentMessages(contextMessages);
-  const requireToolChoice = shouldRequireToolChoice(contextMessages);
-  const agentMessages = skillPrompt
-    ? ([{ role: "system", content: skillPrompt }, ...baseAgentMessages] as ChatCompletionMessageParam[])
-    : baseAgentMessages;
+  const systemPrompts: ChatCompletionMessageParam[] = [
+    { role: "system", content: BASE_CODING_AGENT_PROMPT },
+    { role: "system", content: toolRoutingPrompt },
+    ...(skillPrompt ? [{ role: "system", content: skillPrompt } as ChatCompletionMessageParam] : []),
+  ];
+  const agentMessages = [...systemPrompts, ...baseAgentMessages] as ChatCompletionMessageParam[];
 
   console.info("[agent-skill] injection", {
     enabled: Boolean(skillPrompt),
     skillPromptLength: skillPrompt.length,
-    requireToolChoice,
+    userIntent,
+    routeReason: routedTools.reason,
+    toolChoiceMode,
+    routedToolCount: selectedTools.length,
     baseMessageCount: baseAgentMessages.length,
     finalMessageCount: agentMessages.length,
     firstRole: agentMessages[0]?.role,
@@ -521,8 +638,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       recursionLimit: runtimeConfig.recursionLimit || 6,
       temperature: runtimeConfig.temperature,
       messages: agentMessages,
-      toolChoice: requireToolChoice ? "required" : "auto",
-      allTools,
+      toolChoice: toolChoiceMode,
+      allTools: selectedTools,
       tools,
       abortSignal: workflowAbortController.signal,
       onEvent: (event, data) => {
