@@ -50,17 +50,6 @@ const toModelsEndpoint = (baseUrl: string) => {
   return `${withoutChatCompletions}/v1/models`;
 };
 
-const getEnvCandidateModels = () => {
-  const runtime = getAgentRuntimeConfig();
-  return uniq([
-    runtime.toolCallModel,
-    runtime.normalModel,
-    process.env.OPENAI_MODEL || "",
-    process.env.AI_MODEL || "",
-    process.env.MODEL || "",
-  ]);
-};
-
 interface ParsedModel {
   id: string;
   label: string;
@@ -234,7 +223,9 @@ const fetchAiproxyModels = async (): Promise<ChatModelCatalog> => {
   const baseUrl = runtime.baseUrl;
 
   if (!baseUrl || !apiKey) {
-    const fallbackModels = getEnvCandidateModels().map((id) => ({ id, label: id }));
+    const fallbackModels = uniq([runtime.toolCallModel, runtime.normalModel].filter(Boolean)).map(
+      (id) => ({ id, label: id })
+    );
     return buildCatalog(
       fallbackModels.length > 0 ? fallbackModels : [{ id: "agent", label: "agent" }],
       "env",
@@ -252,7 +243,9 @@ const fetchAiproxyModels = async (): Promise<ChatModelCatalog> => {
   });
 
   if (!response.ok) {
-    const fallbackModels = getEnvCandidateModels().map((id) => ({ id, label: id }));
+    const fallbackModels = uniq([runtime.toolCallModel, runtime.normalModel].filter(Boolean)).map(
+      (id) => ({ id, label: id })
+    );
     const warning = `models_fetch_failed:${response.status}`;
     return buildCatalog(
       fallbackModels.length > 0
@@ -271,7 +264,9 @@ const fetchAiproxyModels = async (): Promise<ChatModelCatalog> => {
     runtimeNormalModel: runtime.normalModel,
   }).map((item) => ({ id: item.id, label: item.label }));
   if (models.length === 0) {
-    const fallbackModels = getEnvCandidateModels().map((id) => ({ id, label: id }));
+    const fallbackModels = uniq([runtime.toolCallModel, runtime.normalModel].filter(Boolean)).map(
+      (id) => ({ id, label: id })
+    );
     return buildCatalog(
       fallbackModels.length > 0
         ? fallbackModels

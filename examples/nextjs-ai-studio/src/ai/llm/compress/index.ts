@@ -109,7 +109,7 @@ export const compressRequestMessages = async ({
 
     if (
       !compressResult ||
-      !Array.isArray(compressResult) ||
+      !Array.isArray(compressResult.compressed_messages) ||
       compressResult.compressed_messages.length === 0
     ) {
       addLog.warn('[Compression messages] failed: cannot parse JSON, return original messages', {

@@ -45,7 +45,19 @@ yarn dev
 - OpenAI：`OPENAI_API_KEY`（可选 `OPENAI_MODEL` / `AI_MODEL`，代理用 `OPENAI_BASE_URL`）
 - Google：`GOOGLE_API_KEY`（可选 `GOOGLE_MODEL`，代理用 `GOOGLE_BASE_URL`）
 - 支持 `/global` 指令：查看、搜索、替换文件内容等
-- 可通过 `MCP_SERVER_URLS`（JSON 或逗号分隔）接入 MCP 工具
+- 可通过 `MCP_SERVER_URLS`（AIChat 风格 JSON 或逗号分隔）接入 MCP 工具
+- 支持 SSE MCP Server（如 `http://host:port/sse`），并自动注入为可调用函数工具
+- 可选为每个 MCP server 传递 `headers`
+
+示例：
+```env
+MCP_SERVER_URLS=[{"name":"mcp-gitlab-kb","url":"http://10.21.8.6:8008/sse"}]
+```
+
+带鉴权头：
+```env
+MCP_SERVER_URLS=[{"name":"mcp-private","url":"https://example.com/sse","headers":{"Authorization":"Bearer xxx"}}]
+```
 
 示例：
 ```

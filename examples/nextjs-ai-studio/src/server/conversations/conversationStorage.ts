@@ -31,18 +31,13 @@ export type Conversation = ConversationSummary & {
 type ConversationMetaDoc = {
   _id: ObjectId;
   token: string;
-  chatId?: string;
+  chatId: string;
   title?: string;
   customTitle?: string;
   top?: boolean;
   createTime?: Date;
   updateTime?: Date;
   deleteTime?: Date | null;
-
-  // Legacy fields
-  createdAt?: string;
-  updatedAt?: string;
-  messages?: ConversationMessage[];
 };
 
 type ConversationItemDoc = {
@@ -65,14 +60,13 @@ const META_COLLECTION = "conversations";
 const ITEM_COLLECTION = "conversation_items";
 const MAX_LIST_CONVERSATIONS = 200;
 const MAX_RECORD_PAGE_SIZE = 2000;
-
-const migratedTokens = new Set<string>();
+const VALID_CHAT_ID_FILTER = { $type: "string", $ne: "" };
 
 const getMetaCollection = async () => {
   const db = await getMongoDb();
   const col = db.collection<ConversationMetaDoc>(META_COLLECTION);
   await Promise.all([
-    col.createIndex({ token: 1, chatId: 1 }, { unique: true, sparse: true }),
+    col.createIndex({ token: 1, chatId: 1 }),
     col.createIndex({ token: 1, deleteTime: 1, top: -1, updateTime: -1 }),
   ]);
   return col;
@@ -88,7 +82,7 @@ const getItemCollection = async () => {
   return col;
 };
 
-const getChatId = () => new ObjectId().toHexString();
+const getChatId = () => createId();
 
 const toDate = (value: unknown, fallback: Date) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -113,7 +107,7 @@ const messageToDoc = ({
   _id: new ObjectId(),
   token,
   chatId,
-  dataId: message.id || createId(),
+  dataId: createId(),
   time,
   role: message.role,
   content: message.content,
@@ -148,67 +142,15 @@ const deriveTitleFromMessage = (content: unknown): string | null => {
 
 const toSummary = (doc: ConversationMetaDoc): ConversationSummary => {
   const now = new Date();
-  const created = toDate(doc.createTime ?? doc.createdAt, now);
-  const updated = toDate(doc.updateTime ?? doc.updatedAt, created);
+  const created = toDate(doc.createTime, now);
+  const updated = toDate(doc.updateTime, created);
 
   return {
-    id: doc.chatId || doc._id.toHexString(),
+    id: doc.chatId,
     title: summaryTitle(doc),
     createdAt: created.toISOString(),
     updatedAt: updated.toISOString(),
   };
-};
-
-const migrateLegacyTokenConversations = async (token: string) => {
-  if (migratedTokens.has(token)) return;
-
-  const metaCol = await getMetaCollection();
-  const itemCol = await getItemCollection();
-
-  const legacyDocs = await metaCol
-    .find({ token, chatId: { $exists: false } })
-    .limit(200)
-    .toArray();
-
-  if (legacyDocs.length === 0) {
-    migratedTokens.add(token);
-    return;
-  }
-
-  for (const doc of legacyDocs) {
-    const chatId = doc._id.toHexString();
-    const createTime = toDate(doc.createTime ?? doc.createdAt, new Date());
-    const updateTime = toDate(doc.updateTime ?? doc.updatedAt, createTime);
-
-    const existingCount = await itemCol.countDocuments({ token, chatId }, { limit: 1 });
-    if (existingCount === 0 && Array.isArray(doc.messages) && doc.messages.length > 0) {
-      const itemDocs = doc.messages.map((message, index) =>
-        messageToDoc({
-          token,
-          chatId,
-          message,
-          time: new Date(createTime.getTime() + index),
-        })
-      );
-      await itemCol.insertMany(itemDocs, { ordered: true });
-    }
-
-    await metaCol.updateOne(
-      { _id: doc._id },
-      {
-        $set: {
-          chatId,
-          createTime,
-          updateTime,
-          deleteTime: doc.deleteTime ?? null,
-          top: doc.top ?? false,
-          customTitle: doc.customTitle ?? "",
-        },
-      }
-    );
-  }
-
-  migratedTokens.add(token);
 };
 
 const getMetaByChatId = async (
@@ -216,60 +158,19 @@ const getMetaByChatId = async (
   chatId: string,
   opts?: { includeDeleted?: boolean }
 ) => {
-  await migrateLegacyTokenConversations(token);
   const col = await getMetaCollection();
 
-  const found = await col.findOne({
+  return col.findOne({
     token,
     chatId,
     ...(opts?.includeDeleted ? {} : { deleteTime: null }),
   });
-  if (found) return found;
-
-  // backward compatibility: allow legacy ObjectId route values
-  try {
-    const objectId = new ObjectId(chatId);
-    const legacy = await col.findOne({ _id: objectId, token });
-    if (!legacy) return null;
-
-    const normalizedChatId = legacy.chatId || legacy._id.toHexString();
-    if (!legacy.chatId) {
-      await col.updateOne(
-        { _id: legacy._id },
-        {
-          $set: {
-            chatId: normalizedChatId,
-            createTime: toDate(legacy.createTime ?? legacy.createdAt, new Date()),
-            updateTime: toDate(legacy.updateTime ?? legacy.updatedAt, new Date()),
-            deleteTime: legacy.deleteTime ?? null,
-            top: legacy.top ?? false,
-            customTitle: legacy.customTitle ?? "",
-          },
-        }
-      );
-    }
-
-    return col.findOne({
-      token,
-      chatId: normalizedChatId,
-      ...(opts?.includeDeleted ? {} : { deleteTime: null }),
-    });
-  } catch {
-    return null;
-  }
 };
 
 const getConversationMessages = async (token: string, chatId: string) => {
   const itemCol = await getItemCollection();
   const itemDocs = await itemCol.find({ token, chatId }).sort({ time: 1, _id: 1 }).toArray();
-  if (itemDocs.length > 0) {
-    return itemDocs.map(docToMessage);
-  }
-
-  // emergency fallback for data before migration inserts item docs
-  const metaCol = await getMetaCollection();
-  const legacy = await metaCol.findOne({ token, chatId });
-  return Array.isArray(legacy?.messages) ? legacy.messages : [];
+  return itemDocs.map(docToMessage);
 };
 
 const ensureMetaByChatId = async ({
@@ -308,10 +209,9 @@ const ensureMetaByChatId = async ({
 };
 
 export async function listConversations(token: string): Promise<ConversationSummary[]> {
-  await migrateLegacyTokenConversations(token);
   const metaCol = await getMetaCollection();
   const docs = await metaCol
-    .find({ token, chatId: { $exists: true }, deleteTime: null })
+    .find({ token, deleteTime: null, chatId: VALID_CHAT_ID_FILTER })
     .sort({ top: -1, updateTime: -1 })
     .limit(MAX_LIST_CONVERSATIONS)
     .toArray();
@@ -366,8 +266,6 @@ export async function createConversation(
   token: string,
   input: { title?: string; messages?: ConversationMessage[]; chatId?: string } = {}
 ): Promise<Conversation> {
-  await migrateLegacyTokenConversations(token);
-
   const itemCol = await getItemCollection();
 
   const now = new Date();
@@ -377,12 +275,11 @@ export async function createConversation(
   await ensureMetaByChatId({ token, chatId, title });
 
   const sourceMessages = Array.isArray(input.messages) ? input.messages : [];
-  if (sourceMessages.length > 0) {
-    await itemCol.insertMany(
-      sourceMessages.map((message, index) =>
-        messageToDoc({ token, chatId, message, time: new Date(now.getTime() + index) })
-      )
-    );
+  const itemDocs = sourceMessages.map((message, index) =>
+    messageToDoc({ token, chatId, message, time: new Date(now.getTime() + index) })
+  );
+  if (itemDocs.length > 0) {
+    await itemCol.insertMany(itemDocs);
   }
 
   return {
@@ -390,10 +287,7 @@ export async function createConversation(
     title,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
-    messages: sourceMessages.map((message) => ({
-      ...message,
-      id: message.id || createId(),
-    })),
+    messages: itemDocs.map(docToMessage),
   };
 }
 
@@ -620,12 +514,10 @@ export async function deleteConversation(token: string, id: string): Promise<boo
 }
 
 export async function deleteAllConversations(token: string): Promise<number> {
-  await migrateLegacyTokenConversations(token);
-
   const col = await getMetaCollection();
   const now = new Date();
   const result = await col.updateMany(
-    { token, chatId: { $exists: true }, deleteTime: null },
+    { token, deleteTime: null, chatId: VALID_CHAT_ID_FILTER },
     {
       $set: {
         deleteTime: now,

@@ -1,5 +1,6 @@
 import type { NextRouter } from "next/router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createId } from "@shared/chat/messages";
 
 
 import {
@@ -10,13 +11,6 @@ import {
 } from "../services/conversations";
 
 import type { Conversation, ConversationSummary } from "@/types/conversation";
-
-const createId = () => {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random()}`;
-};
 
 const CONVERSATION_LIST_CACHE_MS = 1000;
 const conversationListCache = new Map<

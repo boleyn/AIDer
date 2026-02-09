@@ -1,9 +1,4 @@
-export const getNanoid = () => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random()}`;
-};
+export { getNanoid } from '@/global/common/string/tools';
 
 export const sliceJsonStr = (input: string, maxLen = 4000) => {
   if (input.length <= maxLen) return input;

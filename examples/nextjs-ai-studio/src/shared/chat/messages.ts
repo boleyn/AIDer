@@ -1,3 +1,5 @@
+import { getNanoid } from "@/global/common/string/tools";
+
 export type AgentToolCall = {
   id: string;
   type: "function";
@@ -51,8 +53,5 @@ export const extractText = (content: unknown): string => {
 };
 
 export const createId = () => {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random()}`;
+  return getNanoid(24);
 };
