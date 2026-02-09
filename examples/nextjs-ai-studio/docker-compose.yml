@@ -14,6 +14,7 @@ services:
 
       MONGODB_URI: mongodb://myusername:mypassword@10.21.8.6:37017/nextjs_ai_studio?authSource=admin&directConnection=true
       JWT_SECRET: dev-auth-secret-change-me
+      AUTH_COOKIE_SECURE: "false"
 
       AIPROXY_API_ENDPOINT: http://10.21.8.6:33006
       AIPROXY_API_TOKEN: aichat-token

@@ -11,28 +11,68 @@ import {
   useDisclosure,
   ModalCloseButton
 } from '@chakra-ui/react';
-import Icon from '@/components/common/MyIcon';
 import { useCopyData } from '@/hooks/useCopyData';
-import { useTranslation } from 'next-i18next';
 import { useMarkdownWidth } from '../hooks';
-import type { IconNameType } from '@/components/common/MyIcon';
 import { codeLight } from './CodeLight';
 import MyTooltip from '@/components/common/MyTooltip';
+
+type IframeTabIconType = 'code' | 'preview' | 'fullScreen';
+
+const IframeTabIcon = ({ type }: { type: IframeTabIconType | 'copy' }) => {
+  if (type === 'copy') {
+    return (
+      <Box as="svg" w="14px" h="14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="9" y="9" width="11" height="11" rx="2" />
+        <path d="M6 15H5C3.9 15 3 14.1 3 13V5C3 3.9 3.9 3 5 3H13C14.1 3 15 3.9 15 5V6" strokeLinecap="round" />
+      </Box>
+    );
+  }
+
+  if (type === 'code') {
+    return (
+      <Box as="svg" w="14px" h="14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M8 9L5 12L8 15" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M16 9L19 12L16 15" strokeLinecap="round" strokeLinejoin="round" />
+      </Box>
+    );
+  }
+
+  if (type === 'preview') {
+    return (
+      <Box as="svg" w="14px" h="14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M2 12C4.8 7.6 8.1 5.5 12 5.5C15.9 5.5 19.2 7.6 22 12C19.2 16.4 15.9 18.5 12 18.5C8.1 18.5 4.8 16.4 2 12Z" strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="2.4" />
+      </Box>
+    );
+  }
+
+  return (
+    <Box as="svg" w="14px" h="14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M9 4V2" strokeLinecap="round" />
+      <path d="M15 4V2" strokeLinecap="round" />
+      <path d="M9 22V20" strokeLinecap="round" />
+      <path d="M15 22V20" strokeLinecap="round" />
+      <path d="M20 9H22" strokeLinecap="round" />
+      <path d="M20 15H22" strokeLinecap="round" />
+      <path d="M2 9H4" strokeLinecap="round" />
+      <path d="M2 15H4" strokeLinecap="round" />
+    </Box>
+  );
+};
 
 const StyledButton = ({
   label,
   iconName,
   onClick,
   isActive,
-  viewMode,
-  isMobile
+  viewMode
 }: {
   label: string;
-  iconName: IconNameType;
+  iconName: IframeTabIconType;
   onClick: () => void;
   isActive?: boolean;
   viewMode: 'source' | 'iframe';
-  isMobile?: boolean;
 }) => {
   const isPreview = viewMode === 'iframe';
 
@@ -47,37 +87,27 @@ const StyledButton = ({
   const hoverBg = isPreview ? 'myGray.150' : '#333A47';
 
   return (
-    <Flex
-      bg={bg}
-      color={textColor}
-      borderRadius="5px"
-      boxShadow="none"
-      fontWeight={isActive ? 500 : 400}
-      _hover={{
-        bg: hoverBg
-      }}
-      alignItems="center"
-      justifyContent="center"
-      onClick={onClick}
-      cursor="pointer"
-      px={isMobile ? '6px' : '8px'}
-      h={isMobile ? '24px' : '28px'}
-    >
-      {isMobile ? (
-        <MyTooltip label={label} placement="bottom" hasArrow>
-          <Flex alignItems="center" justifyContent="center">
-            <Icon name={iconName} width="14px" height="14px" />
-          </Flex>
-        </MyTooltip>
-      ) : (
-        <Flex alignItems="center" justifyContent="flex-start">
-          <Icon name={iconName} width="14px" height="14px" />
-          <Box ml={2} fontSize="sm">
-            {label}
-          </Box>
-        </Flex>
-      )}
-    </Flex>
+    <MyTooltip label={label} placement="bottom" hasArrow>
+      <Flex
+        bg={bg}
+        color={textColor}
+        borderRadius="5px"
+        boxShadow="none"
+        fontWeight={isActive ? 500 : 400}
+        _hover={{
+          bg: hoverBg
+        }}
+        alignItems="center"
+        justifyContent="center"
+        onClick={onClick}
+        cursor="pointer"
+        px={'8px'}
+        h={'28px'}
+        w={'32px'}
+      >
+        <IframeTabIcon type={iconName} />
+      </Flex>
+    </MyTooltip>
   );
 };
 
@@ -96,7 +126,6 @@ const IframeHtmlCodeBlock = ({
   showAnimation?: boolean;
   dataId?: string;
 }) => {
-  const { t } = useTranslation();
   const { copyData } = useCopyData();
   const [viewMode, setViewMode] = useState<'source' | 'iframe'>('source');
   const isPreview = viewMode === 'iframe';
@@ -111,7 +140,6 @@ const IframeHtmlCodeBlock = ({
   const { width, Ref } = useMarkdownWidth({
     minWidth: { base: 320, md: 500 }
   });
-  const isMobile = width <= 420;
 
   const childrenStr = String(children);
 
@@ -245,31 +273,32 @@ const IframeHtmlCodeBlock = ({
               alignItems="center"
               ml={2}
             >
-              <Icon name="copy" width="14px" />
+              <MyTooltip label={'复制'} placement="bottom" hasArrow>
+                <Flex alignItems="center" justifyContent="center" color={isPreview ? 'myGray.700' : 'white'}>
+                  <IframeTabIcon type="copy" />
+                </Flex>
+              </MyTooltip>
             </Flex>
           </Box>
           <StyledButton
-            label={t('common:Code')}
+            label={'代码'}
             iconName="code"
             onClick={() => setViewMode('source')}
             isActive={viewMode === 'source'}
             viewMode={viewMode}
-            isMobile={isMobile}
           />
           <StyledButton
-            label={t('common:Preview')}
+            label={'预览'}
             iconName="preview"
             onClick={() => setViewMode('iframe')}
             isActive={viewMode === 'iframe'}
             viewMode={viewMode}
-            isMobile={isMobile}
           />
           <StyledButton
-            label={t('common:FullScreen')}
+            label={'全屏'}
             iconName="fullScreen"
             onClick={onOpen}
             viewMode={viewMode}
-            isMobile={isMobile}
           />
         </Flex>
         {isPreview ? (
@@ -319,7 +348,7 @@ const IframeHtmlCodeBlock = ({
                 height="60px"
               >
                 <Box fontSize="lg" color="myGray.900">
-                  {t('common:FullScreenLight')}
+                  {'浅色全屏'}
                 </Box>
                 <ModalCloseButton zIndex={1} position={'relative'} top={0} right={0} />
               </ModalHeader>

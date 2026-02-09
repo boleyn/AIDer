@@ -1,7 +1,7 @@
 import { Box, Flex, Text } from "@chakra-ui/react";
 import { extractText } from "@shared/chat/messages";
 import { useTranslation } from "next-i18next";
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import Markdown from "@/components/Markdown";
 
 import type { ConversationMessage } from "@/types/conversation";
@@ -36,9 +36,37 @@ const getMessageFiles = (message: ConversationMessage): MessageFile[] => {
 
 const getToolDetails = (message: ConversationMessage): ToolDetail[] => {
   if (!message.additional_kwargs || typeof message.additional_kwargs !== "object") return [];
-  const raw = (message.additional_kwargs as { toolDetails?: unknown }).toolDetails;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((item): item is ToolDetail => Boolean(item && typeof item === "object"));
+  const kwargs = message.additional_kwargs as {
+    toolDetails?: unknown;
+    responseData?: unknown;
+  };
+
+  const rawToolDetails = kwargs.toolDetails;
+  if (Array.isArray(rawToolDetails) && rawToolDetails.length > 0) {
+    return rawToolDetails.filter((item): item is ToolDetail => Boolean(item && typeof item === "object"));
+  }
+
+  const responseData = kwargs.responseData;
+  if (!Array.isArray(responseData)) return [];
+
+  return responseData
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item, index) => ({
+      id: typeof item.nodeId === "string" ? `${item.nodeId}-${index}` : undefined,
+      toolName: typeof item.moduleName === "string" ? item.moduleName : undefined,
+      params:
+        typeof item.toolInput === "string"
+          ? item.toolInput
+          : item.toolInput == null
+          ? ""
+          : JSON.stringify(item.toolInput, null, 2),
+      response:
+        typeof item.toolRes === "string"
+          ? item.toolRes
+          : item.toolRes == null
+          ? ""
+          : JSON.stringify(item.toolRes, null, 2),
+    }));
 };
 
 const ChatItem = ({
@@ -148,4 +176,10 @@ const ChatItem = ({
   );
 };
 
-export default ChatItem;
+export default React.memo(
+  ChatItem,
+  (prevProps, nextProps) =>
+    prevProps.isStreaming === nextProps.isStreaming &&
+    prevProps.messageId === nextProps.messageId &&
+    prevProps.message === nextProps.message
+);

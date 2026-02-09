@@ -3,6 +3,13 @@ import { serialize } from "cookie";
 import { verifyAuthToken } from "./jwt";
 import { findUserById } from "./userStore";
 
+const shouldUseSecureCookie = () => {
+  const secureEnv = process.env.AUTH_COOKIE_SECURE?.trim().toLowerCase();
+  if (secureEnv === "true") return true;
+  if (secureEnv === "false") return false;
+  return process.env.NODE_ENV === "production";
+};
+
 export const getAuthTokenFromRequest = (req: NextApiRequest) => {
   const header = typeof req.headers.authorization === "string" ? req.headers.authorization : "";
   if (header.startsWith("Bearer ")) {
@@ -38,10 +45,11 @@ export const requireAuth = async (req: NextApiRequest, res: NextApiResponse) => 
 };
 
 export const setAuthCookie = (res: NextApiResponse, token: string) => {
+  const secure = shouldUseSecureCookie();
   const cookie = serialize("auth_token", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
@@ -49,10 +57,11 @@ export const setAuthCookie = (res: NextApiResponse, token: string) => {
 };
 
 export const clearAuthCookie = (res: NextApiResponse) => {
+  const secure = shouldUseSecureCookie();
   const cookie = serialize("auth_token", "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     maxAge: 0,
   });

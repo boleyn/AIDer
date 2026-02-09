@@ -2,14 +2,12 @@ import React, { useMemo } from 'react';
 import { Box, Flex, useTheme } from '@chakra-ui/react';
 import 'katex/dist/katex.min.css';
 import ChatBoxDivider from '@/components/core/chat/Divider';
-import { useTranslation } from 'next-i18next';
 import { EventNameEnum, eventBus } from '@/shared/utils/eventbus';
 import MyTooltip from '@/components/common/MyTooltip';
 import MyIcon from '@/components/common/MyIcon';
 
 const QuestionGuide = ({ text }: { text: string }) => {
   const theme = useTheme();
-  const { t } = useTranslation();
   const questionGuides = useMemo(() => {
     try {
       const json = JSON.parse(text);
@@ -24,7 +22,7 @@ const QuestionGuide = ({ text }: { text: string }) => {
 
   return questionGuides.length > 0 ? (
     <Box mt={2}>
-      <ChatBoxDivider icon="core/chat/QGFill" text={t('common:core.chat.Question Guide')} />
+      <ChatBoxDivider icon="core/chat/QGFill" text={'问题引导'} />
       <Flex alignItems={'center'} flexWrap={'wrap'} gap={2}>
         {questionGuides.map((text) => (
           <Flex
@@ -60,7 +58,7 @@ const QuestionGuide = ({ text }: { text: string }) => {
               lineHeight={0}
               bg={`linear-gradient(to left, white,white min(60px,100%),rgba(255,255,255,0) 80%)`}
             >
-              <MyTooltip label={t('common:core.chat.markdown.Edit Question')}>
+              <MyTooltip label={'编辑问题'}>
                 <MyIcon
                   name={'edit'}
                   w={'14px'}
@@ -71,7 +69,7 @@ const QuestionGuide = ({ text }: { text: string }) => {
                   onClick={() => eventBus.emit(EventNameEnum.editQuestion, { text })}
                 />
               </MyTooltip>
-              <MyTooltip label={t('common:core.chat.markdown.Send Question')}>
+              <MyTooltip label={'发送问题'}>
                 <MyIcon
                   ml={4}
                   name={'core/chat/sendLight'}

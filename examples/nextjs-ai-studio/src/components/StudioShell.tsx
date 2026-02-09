@@ -249,7 +249,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
     const handleMove = (event: MouseEvent) => {
       if (!resizingRef.current) return;
       const containerLeft = containerRef.current?.getBoundingClientRect().left || 0;
-      const next = Math.min(560, Math.max(300, event.clientX - containerLeft));
+      const next = Math.min(728, Math.max(300, event.clientX - containerLeft));
       setChatWidth(next);
     };
     const handleUp = () => {
@@ -308,7 +308,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const [workspaceHeight, setWorkspaceHeight] = useState("100%");
-  const [chatWidth, setChatWidth] = useState(420);
+  const [chatWidth, setChatWidth] = useState(546);
   const resizingRef = useRef(false);
 
   useEffect(() => {
@@ -388,7 +388,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
             <Box
               flex="0 0 auto"
               minW="300px"
-              maxW="560px"
+              maxW="728px"
               w={`${chatWidth}px`}
               alignSelf="stretch"
             >

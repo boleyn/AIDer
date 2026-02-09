@@ -1,12 +1,10 @@
 import { Box, Flex, Spinner, Text } from "@chakra-ui/react";
 import { withAuthHeaders } from "@features/auth/client/authClient";
-import { createId, extractText } from "@shared/chat/messages";
+import { createId } from "@shared/chat/messages";
 import { streamFetch, SseResponseEventEnum } from "@shared/network/streamFetch";
 import { useRouter } from "next/router";
 import { useTranslation } from "next-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-
 import { useConversations } from "../hooks/useConversations";
 import { getChatModels } from "../services/models";
 import type { ChatInputFile, ChatInputSubmitPayload } from "../types/chatInput";
@@ -19,11 +17,6 @@ import ChatItem from "./ChatItem";
 import ExecutionSummaryRow from "./ExecutionSummaryRow";
 
 import type { ConversationMessage } from "@/types/conversation";
-
-const normalizeStreamContent = (content: unknown) => {
-  const text = extractText(content);
-  return text ?? "";
-};
 
 const TEXT_FILE_EXTENSIONS = [
   ".txt",
@@ -206,6 +199,33 @@ const ChatPanel = ({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
+  const streamingTextRef = useRef("");
+  const streamFlushFrameRef = useRef<number | null>(null);
+
+  const flushAssistantText = useCallback((assistantMessageId: string, content: string) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === assistantMessageId
+          ? {
+              ...msg,
+              content,
+            }
+          : msg
+      )
+    );
+  }, []);
+
+  const scheduleAssistantTextFlush = useCallback(
+    (assistantMessageId: string) => {
+      if (streamFlushFrameRef.current !== null) return;
+
+      streamFlushFrameRef.current = window.requestAnimationFrame(() => {
+        streamFlushFrameRef.current = null;
+        flushAssistantText(assistantMessageId, streamingTextRef.current);
+      });
+    },
+    [flushAssistantText]
+  );
 
   useEffect(() => {
     setMessages(activeConversation?.messages ?? []);
@@ -248,6 +268,15 @@ const ChatPanel = ({
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (streamFlushFrameRef.current !== null) {
+        window.cancelAnimationFrame(streamFlushFrameRef.current);
+        streamFlushFrameRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSend = useCallback(
     async (payload: ChatInputSubmitPayload) => {
@@ -292,6 +321,11 @@ const ChatPanel = ({
       setIsSending(true);
 
       const assistantMessageId = createId();
+      streamingTextRef.current = "";
+      if (streamFlushFrameRef.current !== null) {
+        window.cancelAnimationFrame(streamFlushFrameRef.current);
+        streamFlushFrameRef.current = null;
+      }
       setStreamingMessageId(assistantMessageId);
       setMessages((prev) => [
         ...prev,
@@ -374,13 +408,8 @@ const ChatPanel = ({
             if (abortCtrl.signal.aborted) return;
             if (item.event === SseResponseEventEnum.answer) {
               if (!item.text) return;
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMessageId
-                    ? { ...msg, content: `${normalizeStreamContent(msg.content)}${item.text}` }
-                    : msg
-                )
-              );
+              streamingTextRef.current = `${streamingTextRef.current}${item.text}`;
+              scheduleAssistantTextFlush(assistantMessageId);
               return;
             }
             if (item.event === SseResponseEventEnum.toolCall) {
@@ -417,7 +446,9 @@ const ChatPanel = ({
               if (streamPayload.response && onFilesUpdated) {
                 try {
                   const parsed = JSON.parse(streamPayload.response);
-                  const files = (parsed as { files?: Record<string, { code: string }> }).files;
+                  const files =
+                    (parsed as { files?: Record<string, { code: string }> }).files ||
+                    (parsed as { data?: { files?: Record<string, { code: string }> } }).data?.files;
                   if (files && typeof files === "object") {
                     onFilesUpdated(files);
                   }
@@ -462,6 +493,13 @@ const ChatPanel = ({
           )
         );
       } finally {
+        if (streamFlushFrameRef.current !== null) {
+          window.cancelAnimationFrame(streamFlushFrameRef.current);
+          streamFlushFrameRef.current = null;
+        }
+        if (streamingTextRef.current) {
+          flushAssistantText(assistantMessageId, streamingTextRef.current);
+        }
         if (streamAbortRef.current === abortCtrl) {
           streamAbortRef.current = null;
           streamingConversationIdRef.current = null;

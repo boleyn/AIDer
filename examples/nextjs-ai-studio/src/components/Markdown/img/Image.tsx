@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Box, type ImageProps, Skeleton } from '@chakra-ui/react';
 import MyPhotoView from '@/components/common/Image/PhotoView';
 import { useBoolean } from 'ahooks';
-import { useTranslation } from 'next-i18next';
 import type { AProps } from '../A';
 
 // 全局缓存已加载的图片 URL，避免流式渲染时重复显示加载状态
@@ -13,7 +12,6 @@ const MdImage = React.memo(
     src,
     ...props
   }: { src?: string } & ImageProps & { chatAuthData?: AProps['chatAuthData'] }) => {
-    const { t } = useTranslation();
     // 如果图片已经在缓存中，初始状态为已加载
     const [isLoaded, { setTrue, setFalse }] = useBoolean(src ? loadedImageCache.has(src) : false);
     const [renderSrc, setRenderSrc] = useState(src);
@@ -43,7 +41,7 @@ const MdImage = React.memo(
     }
 
     if (props.alt?.startsWith('OFFIACCOUNT_MEDIA')) {
-      return <Box>{t('common:not_support_wechat_image')}</Box>;
+      return <Box>{'暂不支持微信图片'}</Box>;
     }
 
     return (

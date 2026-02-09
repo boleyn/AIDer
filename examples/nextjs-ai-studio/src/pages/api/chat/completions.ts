@@ -125,6 +125,23 @@ const toStringValue = (value: unknown) => {
   }
 };
 
+const normalizeToolDetails = (value: unknown) => {
+  if (!Array.isArray(value)) return [] as Array<{
+    id?: string;
+    toolName?: string;
+    params?: string;
+    response?: string;
+  }>;
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      id: typeof item.id === "string" ? item.id : undefined,
+      toolName: typeof item.toolName === "string" ? item.toolName : undefined,
+      params: typeof item.params === "string" ? item.params : undefined,
+      response: typeof item.response === "string" ? item.response : undefined,
+    }));
+};
+
 const mergeAssistantToolMessages = (messages: ConversationMessage[]): ConversationMessage[] => {
   const output: ConversationMessage[] = [];
   const pendingCalls = new Map<string, { toolName?: string; params?: string }>();
@@ -512,6 +529,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   })();
   const durationSeconds = Number(((Date.now() - workflowStartAt) / 1000).toFixed(2));
+  const toolDetailsFromFlow = flowResponses.map((node, index) => ({
+    id: `${node.nodeId}-${index}`,
+    toolName: node.moduleName,
+    params: toStringValue(node.toolInput),
+    response: toStringValue(node.toolRes),
+  }));
   const resolvedFinalMessage = (() => {
     if (finalMessage) return finalMessage;
     const assistantMessage =
@@ -556,12 +579,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         current.additional_kwargs && typeof current.additional_kwargs === "object"
           ? current.additional_kwargs
           : {};
+      const existingToolDetails = normalizeToolDetails(
+        (currentKwargs as { toolDetails?: unknown }).toolDetails
+      );
       const currentText = extractText(current.content);
       assistantToStore = {
         ...current,
         content: currentText || resolvedFinalMessage,
         additional_kwargs: {
           ...currentKwargs,
+          toolDetails: existingToolDetails.length > 0 ? existingToolDetails : toolDetailsFromFlow,
           responseData: flowResponses,
           durationSeconds,
         },
@@ -572,6 +599,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         content: resolvedFinalMessage,
         id: createId(),
         additional_kwargs: {
+          toolDetails: toolDetailsFromFlow,
           responseData: flowResponses,
           durationSeconds,
         },

@@ -1,6 +1,5 @@
 import React from 'react';
 import { Box, Button, Flex } from '@chakra-ui/react';
-import { useTranslation } from 'next-i18next';
 import MyIcon from '@/components/common/MyIcon';
 
 export type WorkspacePayload = {
@@ -19,7 +18,6 @@ type Props = {
 };
 
 const WorkspaceCard = ({ payload, onOpenWorkspace, disabled }: Props) => {
-  const { t } = useTranslation();
 
   return (
     <Box mb={1.5} position={'relative'} maxW={'100%'} w={'100%'} minW={0}>
@@ -59,7 +57,7 @@ const WorkspaceCard = ({ payload, onOpenWorkspace, disabled }: Props) => {
               textOverflow={'ellipsis'}
               whiteSpace={'nowrap'}
             >
-              {t('common:Workspace')}
+              {'工作区'}
             </Box>
           </Flex>
           <Button
@@ -77,7 +75,7 @@ const WorkspaceCard = ({ payload, onOpenWorkspace, disabled }: Props) => {
             flexShrink={0}
             ml={2}
           >
-            {t('common:Open_Workspace')}
+            {'打开工作区'}
           </Button>
         </Flex>
       </Box>

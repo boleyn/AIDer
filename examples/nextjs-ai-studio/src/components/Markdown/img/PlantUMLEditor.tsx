@@ -10,7 +10,6 @@ import {
   IconButton,
   Textarea
 } from '@chakra-ui/react';
-import { useTranslation } from 'next-i18next';
 import { deflateRaw } from 'pako';
 import MyIcon from '@/components/common/MyIcon';
 import MyModal from '@/components/common/MyModal';
@@ -62,7 +61,6 @@ function encodePlantUML(text: string): string {
 }
 
 const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) => {
-  const { t } = useTranslation();
   const [editCode, setEditCode] = useState('');
   const [previewSvg, setPreviewSvg] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -337,13 +335,13 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
         onClick={handleEdit}
         variant="outline"
       >
-        {t('common:Edit')} PlantUML
+        {'编辑'} PlantUML
       </Button>
 
       <MyModal
         isOpen={isOpen}
         onClose={handleClose}
-        title={`PlantUML ${t('common:Edit')}`}
+        title={`PlantUML ${'编辑'}`}
         maxW={isFullscreen ? '100vw' : '70vw'}
         maxH={isFullscreen ? '100vh' : '80vh'}
         w={isFullscreen ? '100vw' : '70vw'}
@@ -373,29 +371,29 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
                 bg="gray.50"
               >
                 <Text fontSize="sm" fontWeight="bold">
-                  {t('common:Edit')}
+                  {'编辑'}
                 </Text>
                 <Flex gap={2}>
-                  <MyTooltip label={t('common:Copy')}>
+                  <MyTooltip label={'复制'}>
                     <IconButton
                       size="sm"
                       variant="ghost"
                       icon={<MyIcon name="copy" w="14px" />}
                       onClick={handleCopyCode}
-                      aria-label={t('common:Copy')}
+                      aria-label={'复制'}
                     />
                   </MyTooltip>
-                  <MyTooltip label={t('common:Download')}>
+                  <MyTooltip label={'下载'}>
                     <IconButton
                       size="sm"
                       variant="ghost"
                       icon={<MyIcon name="common/download" w="14px" />}
                       onClick={exportJpg}
-                      aria-label={t('common:Download')}
+                      aria-label={'下载'}
                     />
                   </MyTooltip>
                   <MyTooltip
-                    label={isFullscreen ? t('common:ExitFullScreen') : t('common:FullScreen')}
+                    label={isFullscreen ? '退出全屏' : '全屏'}
                   >
                     <IconButton
                       size="sm"
@@ -408,7 +406,7 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
                       }
                       onClick={toggleFullscreen}
                       aria-label={
-                        isFullscreen ? t('common:ExitFullScreen') : t('common:FullScreen')
+                        isFullscreen ? '退出全屏' : '全屏'
                       }
                     />
                   </MyTooltip>
@@ -425,7 +423,7 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
                   fontSize="14px"
                   resize="none"
                   bg="gray.50"
-                  placeholder={t('common:plantuml.enter_code_placeholder')}
+                  placeholder={'请输入 PlantUML 代码'}
                 />
               </Box>
             </Box>
@@ -457,7 +455,7 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
                 justifyContent="space-between"
               >
                 <Text fontSize="sm" fontWeight="bold">
-                  {t('common:Preview')}
+                  {'预览'}
                 </Text>
                 <Flex alignItems="center" gap={2}>
                   {error && (
@@ -466,35 +464,35 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
                     </Text>
                   )}
                   <Flex alignItems="center" gap={1}>
-                    <MyTooltip label={t('common:photoview.reset')}>
+                    <MyTooltip label={'重置'}>
                       <IconButton
                         size="sm"
                         variant="ghost"
                         icon={<MyIcon name="common/refresh" w="14px" />}
                         onClick={handleResetView}
-                        aria-label={t('common:photoview.reset')}
+                        aria-label={'重置'}
                       />
                     </MyTooltip>
-                    <MyTooltip label={t('common:zoomout_tip')}>
+                    <MyTooltip label={'缩小'}>
                       <IconButton
                         size="sm"
                         variant="ghost"
                         icon={<MyIcon name="common/subtract" w="14px" />}
                         onClick={() => handleZoomChange(-previewStep)}
-                        aria-label={t('common:zoomout_tip')}
+                        aria-label={'缩小'}
                         isDisabled={previewScale <= previewMinScale}
                       />
                     </MyTooltip>
                     <Text fontSize="xs" color="gray.600" minW="44px" textAlign="center">
                       {Math.round(previewScale * 100)}%
                     </Text>
-                    <MyTooltip label={t('common:zoomin_tip')}>
+                    <MyTooltip label={'放大'}>
                       <IconButton
                         size="sm"
                         variant="ghost"
                         icon={<MyIcon name="common/addLight" w="14px" />}
                         onClick={() => handleZoomChange(previewStep)}
-                        aria-label={t('common:zoomin_tip')}
+                        aria-label={'放大'}
                         isDisabled={previewScale >= previewMaxScale}
                       />
                     </MyTooltip>
@@ -538,12 +536,12 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
                 ) : error ? (
                   <Box textAlign="center" color="red.500">
                     <MyIcon name="common/warningLight" w="24px" mb={2} />
-                    <Text fontSize="sm">{t('common:plantuml.syntax_error')}</Text>
+                    <Text fontSize="sm">{'语法错误'}</Text>
                   </Box>
                 ) : (
                   <Box textAlign="center" color="gray.400">
                     <MyIcon name="empty" w="24px" mb={2} />
-                    <Text fontSize="sm">{t('common:plantuml.enter_code_to_preview')}</Text>
+                    <Text fontSize="sm">{'请输入代码进行预览'}</Text>
                   </Box>
                 )}
               </Box>
@@ -553,10 +551,10 @@ const PlantUMLEditor: React.FC<PlantUMLEditorProps> = ({ code, onCodeChange }) =
 
         <ModalFooter>
           <Button variant="outline" mr={3} onClick={handleClose}>
-            {t('common:Cancel')}
+            {'取消'}
           </Button>
           <Button colorScheme="blue" onClick={handleSave} isDisabled={!!error}>
-            {t('common:Save')}
+            {'保存'}
           </Button>
         </ModalFooter>
       </MyModal>

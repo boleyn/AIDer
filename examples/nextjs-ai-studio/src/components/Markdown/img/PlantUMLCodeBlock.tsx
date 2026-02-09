@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Box, Button, useDisclosure, ModalBody, ModalFooter, Input } from '@chakra-ui/react';
-import { useTranslation } from 'next-i18next';
 import { deflateRaw } from 'pako';
 import MyIcon from '@/components/common/MyIcon';
 import MyTooltip from '@/components/common/MyTooltip';
@@ -90,7 +89,6 @@ function extractCompleteCodeHelper(plantumlCode: string): string | null {
 }
 
 const PlantUMLBlock: React.FC<PlantUMLBlockProps> = ({ code, onCodeChange, dataId }) => {
-  const { t } = useTranslation();
   const { isPc } = useSystem();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -401,20 +399,20 @@ const PlantUMLBlock: React.FC<PlantUMLBlockProps> = ({ code, onCodeChange, dataI
       </MyPhotoView>
 
       {/* 文本编辑模态框 */}
-      <MyModal isOpen={isTextEditOpen} onClose={handleTextCancel} title={t('common:Edit')}>
+      <MyModal isOpen={isTextEditOpen} onClose={handleTextCancel} title={'编辑'}>
         <ModalBody>
           <Input
             value={editingText}
             onChange={(e) => setEditingText(e.target.value)}
-            placeholder={t('common:plantuml.enter_text')}
+            placeholder={'请输入文本'}
           />
         </ModalBody>
         <ModalFooter>
           <Button variant="outline" mr={3} onClick={handleTextCancel}>
-            {t('common:Cancel')}
+            {'取消'}
           </Button>
           <Button colorScheme="blue" onClick={handleTextSave}>
-            {t('common:Save')}
+            {'保存'}
           </Button>
         </ModalFooter>
       </MyModal>

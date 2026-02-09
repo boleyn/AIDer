@@ -3,7 +3,6 @@ import { Box, useDisclosure } from '@chakra-ui/react';
 import mermaid from 'mermaid';
 import MyIcon from '@/components/common/MyIcon';
 import MyTooltip from '@/components/common/MyTooltip';
-import { useTranslation } from 'next-i18next';
 import MermaidEditor from './MermaidEditor';
 import { ensureMermaidInitialized, exportSvgToJpg } from './utils';
 import { useSystem } from '@/hooks/useSystem';
@@ -33,7 +32,6 @@ interface MermaidBlockProps {
 }
 
 const MermaidBlock: React.FC<MermaidBlockProps> = ({ code, onCodeChange }) => {
-  const { t } = useTranslation();
   const { isPc } = useSystem();
   const ref = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -233,7 +231,7 @@ const MermaidBlock: React.FC<MermaidBlockProps> = ({ code, onCodeChange }) => {
             alignItems={'center'}
             onClick={(e) => e.stopPropagation()}
           >
-            <MyTooltip label={t('common:Download')}>
+            <MyTooltip label={'下载'}>
               <MyIcon
                 name={'common/download'}
                 w={'18px'}
@@ -242,7 +240,7 @@ const MermaidBlock: React.FC<MermaidBlockProps> = ({ code, onCodeChange }) => {
                 mr={2}
                 cursor={'pointer'}
                 onClick={exportJpg}
-                aria-label={t('common:Download')}
+                aria-label={'下载'}
               />
             </MyTooltip>
             {/* 编辑按钮放在最后，统一容器内排布，移动端不显示 */}

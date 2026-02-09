@@ -3,7 +3,6 @@ import { Box } from '@chakra-ui/react';
 import Icon from '@/components/common/MyIcon';
 import MyTooltip from '@/components/common/MyTooltip';
 import { useCopyData } from '@/hooks/useCopyData';
-import { useTranslation } from 'next-i18next';
 
 interface TableProps {
   children: React.ReactNode;
@@ -12,7 +11,6 @@ interface TableProps {
 }
 
 const Table = ({ children, className, ...props }: TableProps) => {
-  const { t } = useTranslation();
   const { copyData } = useCopyData();
   const tableRef = useRef<HTMLTableElement>(null);
 
@@ -110,7 +108,7 @@ const Table = ({ children, className, ...props }: TableProps) => {
   return (
     <Box position={'relative'} my={4} className="table-wrapper">
       <Box position={'absolute'} top={'-36px'} right={0} zIndex={10} display={'flex'} gap={1}>
-        <MyTooltip label={t('common:Copy')}>
+        <MyTooltip label={'复制'}>
           <Box
             cursor={'pointer'}
             onClick={handleCopy}

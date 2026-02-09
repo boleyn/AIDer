@@ -3,7 +3,6 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { Box, Flex } from '@chakra-ui/react';
 import Icon from '@/components/common/MyIcon';
 import { useCopyData } from '@/hooks/useCopyData';
-import { useTranslation } from 'next-i18next';
 import { useMarkdownWidth } from '../hooks';
 
 export const codeLight: { [key: string]: React.CSSProperties } = {
@@ -296,7 +295,6 @@ const CodeLight = ({
   codeBlock?: boolean;
   match: RegExpExecArray | null;
 }) => {
-  const { t } = useTranslation();
   const { copyData } = useCopyData();
   // 使用动态宽度计算，设置代码块的最小宽度
   const { width, Ref } = useMarkdownWidth({
@@ -352,7 +350,7 @@ const CodeLight = ({
           </Box>
           <Flex cursor={'pointer'} onClick={() => copyData(String(children))} alignItems={'center'}>
             <Icon name={'copy'} width={15} height={15}></Icon>
-            <Box ml={1}>{t('common:Copy')}</Box>
+            <Box ml={1}>{'复制'}</Box>
           </Flex>
         </Flex>
         <Box overflow={'auto'} maxW={'100%'}>

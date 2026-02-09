@@ -96,6 +96,7 @@ MCP_SERVER_URLS=[{"name":"mcp-private","url":"https://example.com/sse","headers"
 ```
 MONGODB_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
+AUTH_COOKIE_SECURE=false
 
 # 飞书 OAuth
 FEISHU_APP_ID=your_feishu_app_id
@@ -106,3 +107,4 @@ FEISHU_DEFAULT_PASSWORD=Feishu@123456
 
 说明：
 - 飞书登录若发现账号不存在，会自动注册并写入默认密码（`FEISHU_DEFAULT_PASSWORD`）。
+- 若通过 `http://IP:3000` 访问（非 HTTPS），生产部署请设置 `AUTH_COOKIE_SECURE=false`，否则浏览器不会携带 `auth_token` Cookie，可能出现登录后反复跳回登录页。

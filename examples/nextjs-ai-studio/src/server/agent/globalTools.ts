@@ -20,6 +20,7 @@ export type GlobalToolResult = {
   action: GlobalToolInput["action"];
   message: string;
   data?: Record<string, unknown>;
+  files?: Record<string, { code: string }>;
 };
 
 export const globalToolSchema = z.object({
@@ -139,7 +140,8 @@ export async function runGlobalAction(
       ok: true,
       action,
       message: `已写入 ${path}。`,
-      data: { path },
+      data: { path, files: { [path]: { code: input.content } } },
+      files: { [path]: { code: input.content } },
     };
   }
 
@@ -161,7 +163,8 @@ export async function runGlobalAction(
       ok: true,
       action,
       message: `已在 ${path} 中替换 ${count} 处。`,
-      data: { path, replaced: count },
+      data: { path, replaced: count, files: { [path]: { code: content } } },
+      files: { [path]: { code: content } },
     };
   }
 

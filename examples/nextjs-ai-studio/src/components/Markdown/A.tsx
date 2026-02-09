@@ -2,7 +2,6 @@ import { eventBus, EventNameEnum } from '@/shared/utils/eventbus';
 import { Button, Link } from '@chakra-ui/react';
 import MyIcon from '@/components/common/MyIcon';
 import MyTooltip from '@/components/common/MyTooltip';
-import { useTranslation } from 'next-i18next';
 import React, { useMemo } from 'react';
 import { isObjectId } from '@/global/common/string/utils';
 import type { OutLinkChatAuthProps } from '@/global/support/permission/chat';
@@ -24,9 +23,8 @@ export type AProps = {
 };
 
 const EmptyHrefLink = function EmptyHrefLink({ content }: { content: string }) {
-  const { t } = useTranslation();
   return (
-    <MyTooltip label={t('common:core.chat.markdown.Quick Question')}>
+    <MyTooltip label={'快速提问'}>
       <Button
         variant={'whitePrimary'}
         size={'xs'}
