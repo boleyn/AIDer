@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { Box, Flex, Spinner, Text, VStack } from "@chakra-ui/react";
 import { useToast } from "@chakra-ui/react";
 import { setAuthToken } from "@features/auth/client/authClient";
+import { getFeishuRuntimeConfig } from "@features/auth/client/feishuConfigClient";
 
 const FEISHU_JSAPI_URL =
   "https://lf-package-cn.feishucdn.com/obj/feishu-static/lark/passport/jsapi/jsapi.js";
@@ -19,15 +20,10 @@ const FeishuAutoLoginPage = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const appId = process.env.NEXT_PUBLIC_FEISHU_APP_ID;
-    const redirectUri = process.env.NEXT_PUBLIC_FEISHU_REDIRECT_URI;
-    if (!appId || !redirectUri) {
-      setError("飞书登录未配置");
-      return;
-    }
-
     const rawLastRoute = typeof router.query.lastRoute === "string" ? router.query.lastRoute : "/";
     const lastRoute = getLastRoute(rawLastRoute);
+
+    let disposed = false;
 
     const loadScript = () =>
       new Promise<void>((resolve, reject) => {
@@ -42,7 +38,7 @@ const FeishuAutoLoginPage = () => {
         document.head.appendChild(script);
       });
 
-    const requestCode = async () => {
+    const requestCode = async (appId: string) => {
       setStatus("正在获取飞书授权码...");
       const tt = (window as any).tt;
       if (tt?.requestAccess || tt?.requestAuthCode) {
@@ -67,7 +63,7 @@ const FeishuAutoLoginPage = () => {
       return null;
     };
 
-    const redirectToAuthorize = () => {
+    const redirectToAuthorize = (appId: string, redirectUri: string) => {
       setStatus("正在跳转飞书授权页...");
       const callbackUrl = `${redirectUri}${redirectUri.includes("?") ? "&" : "?"}lastRoute=${encodeURIComponent(
         lastRoute
@@ -83,10 +79,21 @@ const FeishuAutoLoginPage = () => {
 
     const run = async () => {
       try {
+        const config = await getFeishuRuntimeConfig();
+        const appId = config.appId;
+        const redirectUri = config.redirectUri;
+
+        if (disposed) return;
+
+        if (!appId || !redirectUri) {
+          setError("飞书登录未配置");
+          return;
+        }
+
         await loadScript();
-        const code = await requestCode();
+        const code = await requestCode(appId);
         if (!code) {
-          redirectToAuthorize();
+          redirectToAuthorize(appId, redirectUri);
           return;
         }
         setStatus("正在验证飞书授权码...");
@@ -114,6 +121,10 @@ const FeishuAutoLoginPage = () => {
     if (router.isReady) {
       run();
     }
+
+    return () => {
+      disposed = true;
+    };
   }, [router, toast]);
 
   return (

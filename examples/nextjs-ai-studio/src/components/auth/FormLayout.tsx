@@ -1,7 +1,8 @@
 import { AbsoluteCenter, Box, Button, Flex } from "@chakra-ui/react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LoginPageTypeEnum } from "./constants";
 import Avatar from "./Avatar";
+import { getFeishuRuntimeConfig } from "@features/auth/client/feishuConfigClient";
 
 const FormLayout = ({
   children,
@@ -12,11 +13,22 @@ const FormLayout = ({
   setPageType: (pageType: LoginPageTypeEnum) => void;
   pageType: LoginPageTypeEnum;
 }) => {
-  const feishuAppId = process.env.NEXT_PUBLIC_FEISHU_APP_ID;
+  const [feishuEnabled, setFeishuEnabled] = useState(false);
+
+  useEffect(() => {
+    let disposed = false;
+    getFeishuRuntimeConfig().then((config) => {
+      if (disposed) return;
+      setFeishuEnabled(Boolean(config.enabled && config.appId));
+    });
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   const oAuthList = useMemo(
     () => [
-      ...(feishuAppId && pageType !== LoginPageTypeEnum.feishu
+      ...(feishuEnabled && pageType !== LoginPageTypeEnum.feishu
         ? [
             {
               label: "飞书快捷登录",
@@ -35,7 +47,7 @@ const FormLayout = ({
           ]
         : []),
     ],
-    [feishuAppId, pageType]
+    [feishuEnabled, pageType]
   );
 
   const showOauth = oAuthList.length > 0;

@@ -12,7 +12,7 @@ const payloadSchema = z.object({
 const getFeishuConfig = () => ({
   appId: process.env.FEISHU_APP_ID,
   appSecret: process.env.FEISHU_APP_SECRET,
-  redirectUri: process.env.NEXT_PUBLIC_FEISHU_REDIRECT_URI,
+  redirectUri: process.env.FEISHU_REDIRECT_URI,
   defaultPassword: process.env.FEISHU_DEFAULT_PASSWORD || "Feishu@123456",
 });
 

@@ -1,0 +1,29 @@
+services:
+  nextjs-ai-studio:
+    container_name: nextjs-ai-studio
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: https://registry.npmmirror.com
+    ports:
+      - 3000:3000
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      MONGODB_URI: mongodb://myusername:mypassword@10.21.8.6:37017/nextjs_ai_studio?authSource=admin&directConnection=true
+      JWT_SECRET: dev-auth-secret-change-me
+
+      AIPROXY_API_ENDPOINT: http://10.21.8.6:33006
+      AIPROXY_API_TOKEN: aichat-token
+
+      MCP_SERVER_URLS: '[{"name":"mcp-gitlab-kb","url":"http://10.21.8.6:8008/sse"}]'
+      SYSTEM_NAME: AI
+
+      FEISHU_APP_ID: cli_a8a85d3c9729d013
+      FEISHU_REDIRECT_URI: http://aistudio.asiainfo.tech/auth/feishu/callback
+      FEISHU_APP_SECRET: XERk7R8NgkjubxxH8yqdngutC3Y2uea7
+      FEISHU_DEFAULT_PASSWORD: Feishu@123456
+
+    restart: unless-stopped

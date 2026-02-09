@@ -3,6 +3,7 @@ import { Box } from "@chakra-ui/react";
 import { useToast } from "@chakra-ui/react";
 import { LoginPageTypeEnum } from "./constants";
 import FormLayout from "./FormLayout";
+import { getFeishuRuntimeConfig } from "@features/auth/client/feishuConfigClient";
 
 const FEISHU_SDK_URL =
   "https://lf-package-cn.feishucdn.com/obj/feishu-static/lark/passport/qrcode/LarkSSOSDKWebQRCode-1.0.3.js";
@@ -21,15 +22,10 @@ const FeishuForm = ({ setPageType, lastRoute }: FeishuFormProps) => {
   const toast = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
   const qrInstRef = useRef<any>(null);
+  const configRef = useRef<{ appId: string; redirectUri: string }>({ appId: "", redirectUri: "" });
 
   useEffect(() => {
-    const appId = process.env.NEXT_PUBLIC_FEISHU_APP_ID;
-    const redirectUri = process.env.NEXT_PUBLIC_FEISHU_REDIRECT_URI;
-
-    if (!appId || !redirectUri) {
-      toast({ status: "error", title: "飞书登录配置缺失" });
-      return;
-    }
+    let disposed = false;
 
     const handleMessage = (e: MessageEvent) => {
       try {
@@ -44,6 +40,9 @@ const FeishuForm = ({ setPageType, lastRoute }: FeishuFormProps) => {
         const tmpCode = (e.data as any)?.tmp_code;
         if (!tmpCode) return;
 
+        const { appId, redirectUri } = configRef.current;
+        if (!appId || !redirectUri) return;
+
         const callbackUrl = `${redirectUri}${redirectUri.includes("?") ? "&" : "?"}lastRoute=${encodeURIComponent(
           getLastRoute(lastRoute)
         )}`;
@@ -56,7 +55,7 @@ const FeishuForm = ({ setPageType, lastRoute }: FeishuFormProps) => {
       }
     };
 
-    const initFeishuLogin = () => {
+    const initFeishuLogin = (appId: string, redirectUri: string) => {
       if (!containerRef.current) return;
 
       const callbackUrl = `${redirectUri}${redirectUri.includes("?") ? "&" : "?"}lastRoute=${encodeURIComponent(
@@ -77,17 +76,35 @@ const FeishuForm = ({ setPageType, lastRoute }: FeishuFormProps) => {
       window.addEventListener("message", handleMessage);
     };
 
-    if (typeof window !== "undefined" && !(window as any).QRLogin) {
-      const script = document.createElement("script");
-      script.src = FEISHU_SDK_URL;
-      script.onload = () => initFeishuLogin();
-      script.onerror = () => toast({ status: "error", title: "飞书登录加载失败" });
-      document.head.appendChild(script);
-    } else if ((window as any).QRLogin) {
-      initFeishuLogin();
-    }
+    const run = async () => {
+      const config = await getFeishuRuntimeConfig();
+      const appId = config.appId;
+      const redirectUri = config.redirectUri;
+
+      if (disposed) return;
+
+      if (!appId || !redirectUri) {
+        toast({ status: "error", title: "飞书登录配置缺失" });
+        return;
+      }
+
+      configRef.current = { appId, redirectUri };
+
+      if (typeof window !== "undefined" && !(window as any).QRLogin) {
+        const script = document.createElement("script");
+        script.src = FEISHU_SDK_URL;
+        script.onload = () => initFeishuLogin(appId, redirectUri);
+        script.onerror = () => toast({ status: "error", title: "飞书登录加载失败" });
+        document.head.appendChild(script);
+      } else if ((window as any).QRLogin) {
+        initFeishuLogin(appId, redirectUri);
+      }
+    };
+
+    run();
 
     return () => {
+      disposed = true;
       if (typeof window !== "undefined") {
         window.removeEventListener("message", handleMessage);
       }

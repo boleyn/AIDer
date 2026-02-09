@@ -98,8 +98,8 @@ MONGODB_URI=your_mongodb_uri
 JWT_SECRET=your_jwt_secret
 
 # 飞书 OAuth
-NEXT_PUBLIC_FEISHU_APP_ID=your_feishu_app_id
-NEXT_PUBLIC_FEISHU_REDIRECT_URI=http://localhost:3000/auth/feishu/callback
+FEISHU_APP_ID=your_feishu_app_id
+FEISHU_REDIRECT_URI=http://localhost:3000/auth/feishu/callback
 FEISHU_APP_SECRET=your_feishu_app_secret
 FEISHU_DEFAULT_PASSWORD=Feishu@123456
 ```
