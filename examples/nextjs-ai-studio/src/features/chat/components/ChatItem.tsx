@@ -163,6 +163,7 @@ const ChatItem = ({
         fontSize="sm"
         maxW="92%"
         minW="88px"
+        minH="0"
         px={4}
         py={3}
       >
@@ -218,6 +219,8 @@ const ChatItem = ({
                         borderColor="rgba(203,213,225,0.9)"
                         borderRadius="10px"
                         flex="1"
+                        maxW="full"
+                        minW={0}
                         p={2.5}
                       >
                         <Flex align="center" gap={2}>
@@ -275,7 +278,14 @@ const ChatItem = ({
                                   </Button>
                                 ) : null}
                               </Flex>
-                              <Text color="gray.600" fontFamily="mono" fontSize="11px" whiteSpace="pre-wrap">
+                              <Text
+                                color="gray.600"
+                                fontFamily="mono"
+                                fontSize="11px"
+                                overflowWrap="anywhere"
+                                whiteSpace="pre-wrap"
+                                wordBreak="break-word"
+                              >
                                 {truncatedParams || "{}"}
                               </Text>
                             </Box>
@@ -302,7 +312,14 @@ const ChatItem = ({
                                 ) : null}
                               </Flex>
                               {truncatedResponse ? (
-                                <Text color="gray.800" fontFamily="mono" fontSize="11px" whiteSpace="pre-wrap">
+                                <Text
+                                  color="gray.800"
+                                  fontFamily="mono"
+                                  fontSize="11px"
+                                  overflowWrap="anywhere"
+                                  whiteSpace="pre-wrap"
+                                  wordBreak="break-word"
+                                >
                                   {truncatedResponse}
                                 </Text>
                               ) : isRunning ? (

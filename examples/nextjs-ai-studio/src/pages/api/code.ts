@@ -26,6 +26,11 @@ type UpdateFilesRequest = {
   dependencies?: Record<string, string>;
 };
 
+const hasNonEmptyFiles = (files: unknown): files is Record<string, { code: string }> => {
+  if (!files || typeof files !== "object") return false;
+  return Object.keys(files as Record<string, unknown>).length > 0;
+};
+
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   const auth = await requireAuth(req, res);
   if (!auth) return;
@@ -148,6 +153,11 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
       if (!body.files || typeof body.files !== "object") {
         res.status(400).json({ error: "缺少files参数" });
+        return;
+      }
+
+      if (!hasNonEmptyFiles(body.files)) {
+        res.status(400).json({ error: "files 不能为空" });
         return;
       }
 

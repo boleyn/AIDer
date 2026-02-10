@@ -13,12 +13,33 @@ const getClientPromise = () => {
   if (!global.__mongoClientPromise) {
     global.__mongoClientPromise = new MongoClient(uri, {
       maxPoolSize: 10,
-    }).connect();
+    })
+      .connect()
+      .catch((error) => {
+        global.__mongoClientPromise = undefined;
+        throw error;
+      });
   }
   return global.__mongoClientPromise;
 };
 
-export async function getMongoDb() {
+const getHealthyClient = async (isRetry = false): Promise<MongoClient> => {
   const client = await getClientPromise();
+
+  try {
+    await client.db().command({ ping: 1 });
+    return client;
+  } catch (error) {
+    if (isRetry) {
+      throw error;
+    }
+
+    global.__mongoClientPromise = undefined;
+    return getHealthyClient(true);
+  }
+};
+
+export async function getMongoDb() {
+  const client = await getHealthyClient();
   return client.db();
 }

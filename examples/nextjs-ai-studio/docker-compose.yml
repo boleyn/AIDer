@@ -11,6 +11,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      CHAT_MODEL_CONFIG_FILE: config/config.json
 
       MONGODB_URI: mongodb://myusername:mypassword@10.21.8.6:37017/nextjs_ai_studio?authSource=admin&directConnection=true
       JWT_SECRET: dev-auth-secret-change-me
@@ -27,5 +28,9 @@ services:
       FEISHU_REDIRECT_URI: http://aistudio.asiainfo.tech/auth/feishu/callback
       FEISHU_APP_SECRET: XERk7R8NgkjubxxH8yqdngutC3Y2uea7
       FEISHU_DEFAULT_PASSWORD: Feishu@123456
+
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/projects:/app/data/projects
 
     restart: unless-stopped

@@ -9,8 +9,8 @@ export type AgentRuntimeConfig = {
   baseUrl?: string;
 };
 
-const DEFAULT_TOOL_CALL_MODEL = "gpt-4o-mini";
-const DEFAULT_NORMAL_MODEL = "gpt-4o-mini";
+const DEFAULT_TOOL_CALL_MODEL = "";
+const DEFAULT_NORMAL_MODEL = "";
 const DEFAULT_RECURSION_LIMIT = 100;
 
 export const getAgentRuntimeConfig = (): AgentRuntimeConfig => {

@@ -8,7 +8,7 @@ import { createProjectTools } from "@server/agent/tools";
 import type { AgentToolDefinition } from "@server/agent/tools/types";
 import { runSimpleAgentWorkflow } from "@server/agent/workflow/simpleAgentWorkflow";
 import { getAgentRuntimeSkillPrompt } from "@server/agent/skillPrompt";
-import { getChatModelCatalog } from "@server/aiProxy/modelCatalog";
+import { getChatModelCatalog } from "@server/aiProxy/catalogStore";
 import { requireAuth } from "@server/auth/session";
 import {
   registerActiveConversationRun,
@@ -383,6 +383,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? req.body.conversationId
       : undefined;
   const stream = req.body?.stream === true;
+  const channel = typeof req.body?.channel === "string" ? req.body.channel : "";
+  const modelCatalogKey = typeof req.body?.modelCatalogKey === "string" ? req.body.modelCatalogKey : undefined;
   const model = typeof req.body?.model === "string" ? req.body.model : "agent";
   const created = Math.floor(Date.now() / 1000);
   let streamStarted = false;
@@ -535,9 +537,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const selectedTools = routedTools.selectedTools;
   const toolChoiceMode = selectedTools.length > 0 ? resolveToolChoice(userIntent) : "auto";
   const toolRoutingPrompt = buildToolRoutingSystemPrompt(userIntent, routedTools, toolChoiceMode);
+  const hasGitlabKbTools = selectedTools.some((tool) => tool.name.startsWith("mcp_mcp-gitlab-kb__"));
   const requestedModel = model && model !== "agent" ? model : runtimeConfig.toolCallModel;
-  const catalog = await getChatModelCatalog().catch(() => ({
-    models: [] as Array<{ id: string; label: string; source: "aiproxy" | "env" }>,
+  const catalog = await getChatModelCatalog({ key: modelCatalogKey }).catch(() => ({
+    models: [] as Array<{ id: string; label: string; channel: string; source: "aiproxy" | "env" }>,
+    catalogKey: modelCatalogKey || "default",
     defaultModel: requestedModel,
     toolCallModel: runtimeConfig.toolCallModel,
     normalModel: runtimeConfig.normalModel,
@@ -546,14 +550,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     warning: "models_catalog_fetch_failed",
   }));
   const availableModels = new Set(catalog.models.map((item) => item.id));
+  const filteredCatalogModels = channel
+    ? catalog.models.filter((item) => item.channel === channel)
+    : catalog.models;
+  const availableFilteredModels = new Set(filteredCatalogModels.map((item) => item.id));
   const selectedModel =
-    availableModels.size === 0
+    availableFilteredModels.size === 0
+      ? availableModels.size === 0
+        ? requestedModel
+        : availableModels.has(requestedModel)
+        ? requestedModel
+        : availableModels.has(catalog.defaultModel)
+        ? catalog.defaultModel
+        : catalog.models[0]?.id || requestedModel
+      : availableFilteredModels.has(requestedModel)
       ? requestedModel
-      : availableModels.has(requestedModel)
-      ? requestedModel
-      : availableModels.has(catalog.defaultModel)
+      : availableFilteredModels.has(catalog.defaultModel)
       ? catalog.defaultModel
-      : catalog.models[0]?.id || requestedModel;
+      : filteredCatalogModels[0]?.id || requestedModel;
 
   const tools: ChatCompletionTool[] = selectedTools.map((tool) => ({
     type: "function",
@@ -596,7 +610,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     }) as ChatCompletionMessageParam[];
 
-  const skillPrompt = userIntent === "general" ? "" : await getAgentRuntimeSkillPrompt();
+  const shouldInjectSkillPrompt = userIntent === "coding" && hasGitlabKbTools;
+  const skillPrompt = shouldInjectSkillPrompt ? await getAgentRuntimeSkillPrompt() : "";
   const baseAgentMessages = toAgentMessages(contextMessages);
   const systemPrompts: ChatCompletionMessageParam[] = [
     { role: "system", content: BASE_CODING_AGENT_PROMPT },
@@ -607,6 +622,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   console.info("[agent-skill] injection", {
     enabled: Boolean(skillPrompt),
+    shouldInjectSkillPrompt,
+    hasGitlabKbTools,
     skillPromptLength: skillPrompt.length,
     userIntent,
     routeReason: routedTools.reason,

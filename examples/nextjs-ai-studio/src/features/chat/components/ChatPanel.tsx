@@ -7,6 +7,7 @@ import { useTranslation } from "next-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConversations } from "../hooks/useConversations";
 import { getChatModels } from "../services/models";
+import type { ChatModelCatalog } from "../services/models";
 import type { ChatInputFile, ChatInputSubmitPayload } from "../types/chatInput";
 import { getExecutionSummary } from "../utils/executionSummary";
 import { type FlowNodeResponsePayload } from "../utils/flowNodeMessages";
@@ -214,10 +215,12 @@ const ChatPanel = ({
   const [isSending, setIsSending] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [modelLoading, setModelLoading] = useState(false);
+  const [channel, setChannel] = useState("aiproxy");
   const [model, setModel] = useState("agent");
-  const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string; icon?: string }>>([
-    { value: "agent", label: "agent" },
+  const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string; channel: string; icon?: string }>>([
+    { value: "agent", label: "agent", channel: "aiproxy" },
   ]);
+  const [modelCatalog, setModelCatalog] = useState<ChatModelCatalog | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
@@ -256,26 +259,42 @@ const ChatPanel = ({
   useEffect(() => {
     let active = true;
     setModelLoading(true);
-    getChatModels(true)
+    getChatModels()
       .then((catalog) => {
         if (!active) return;
+        setModelCatalog(catalog);
+
         const options = catalog.models.length
           ? catalog.models.map((item) => {
               return {
                 value: item.id,
                 label: item.label || item.id,
+                channel: item.channel,
               };
             })
-          : [{ value: catalog.defaultModel || catalog.toolCallModel || "agent", label: catalog.defaultModel || catalog.toolCallModel || "agent" }];
+          : [
+              {
+                value: catalog.defaultModel || catalog.toolCallModel || "agent",
+                label: catalog.defaultModel || catalog.toolCallModel || "agent",
+                channel: catalog.defaultChannel || "aiproxy",
+              },
+            ];
         setModelOptions(options);
-        setModel((prev) => {
-          if (options.some((item) => item.value === prev)) return prev;
+        const nextModel = (() => {
+          const prevMatch = options.find((item) => item.value === model);
+          if (prevMatch) return prevMatch.value;
           return catalog.defaultModel || catalog.toolCallModel || options[0]?.value || "agent";
-        });
+        })();
+
+        setModel(nextModel);
+        const selectedModel = options.find((item) => item.value === nextModel);
+        setChannel(selectedModel?.channel || catalog.defaultChannel || "aiproxy");
       })
       .catch(() => {
         if (!active) return;
-        setModelOptions([{ value: "agent", label: "agent" }]);
+        setModelCatalog(null);
+        setChannel("aiproxy");
+        setModelOptions([{ value: "agent", label: "agent", channel: "aiproxy" }]);
       })
       .finally(() => {
         if (active) setModelLoading(false);
@@ -285,6 +304,15 @@ const ChatPanel = ({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!modelCatalog) return;
+    const selected = modelCatalog.models.find((item) => item.id === model);
+    if (!selected) return;
+    if (selected.channel !== channel) {
+      setChannel(selected.channel);
+    }
+  }, [channel, model, modelCatalog]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -422,6 +450,7 @@ const ChatPanel = ({
             messages: [userMessage],
             stream: true,
             ...(conversationId ? { conversationId } : {}),
+            channel,
             model,
           },
           headers: withAuthHeaders(),
@@ -536,6 +565,7 @@ const ChatPanel = ({
       ensureConversation,
       isSending,
       model,
+      channel,
       onFilesUpdated,
       token,
       updateConversationTitle,

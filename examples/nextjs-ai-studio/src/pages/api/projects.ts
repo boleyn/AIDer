@@ -24,6 +24,11 @@ type CreateProjectRequest = {
   dependencies?: Record<string, string>;
 };
 
+const hasNonEmptyFiles = (files: unknown): files is Record<string, { code: string }> => {
+  if (!files || typeof files !== "object") return false;
+  return Object.keys(files as Record<string, unknown>).length > 0;
+};
+
 // 默认项目模板（Node + React）
 const DEFAULT_TEMPLATE: SandpackPredefinedTemplate = "react";
 const DEFAULT_FILES: Record<string, { code: string }> = {
@@ -162,7 +167,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         name,
         template: body.template || DEFAULT_TEMPLATE,
         userId,
-        files: body.files || DEFAULT_FILES,
+        files: hasNonEmptyFiles(body.files) ? body.files : DEFAULT_FILES,
         dependencies: body.dependencies || {},
         createdAt: now,
         updatedAt: now,

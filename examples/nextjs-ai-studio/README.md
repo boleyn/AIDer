@@ -48,6 +48,7 @@ yarn dev
 - 可通过 `MCP_SERVER_URLS`（AIChat 风格 JSON 或逗号分隔）接入 MCP 工具
 - 支持 SSE MCP Server（如 `http://host:port/sse`），并自动注入为可调用函数工具
 - 可选为每个 MCP server 传递 `headers`
+- 聊天模型目录支持 `config/config.json` 静态配置：`{ "model": [{"id":"...","label":"..."}] }`
 
 示例：
 ```env

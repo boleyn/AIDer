@@ -4,10 +4,6 @@ import {
   Flex,
   IconButton,
   Input,
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuList,
   Text,
   Textarea,
 } from "@chakra-ui/react";
@@ -17,6 +13,7 @@ import { useTranslation } from "next-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatInputFile, ChatInputProps, ChatInputSubmitPayload } from "../types/chatInput";
+import ModelCascader from "./ModelCascader";
 
 const ChatInput = ({
   isSending,
@@ -39,10 +36,6 @@ const ChatInput = ({
   const canSend = useMemo(
     () => !isSending && !isSubmitting && (text.trim().length > 0 || files.length > 0),
     [files.length, isSending, isSubmitting, text]
-  );
-  const selectedModelOption = useMemo(
-    () => modelOptions.find((item) => item.value === model),
-    [model, modelOptions]
   );
   const previewFiles = useMemo(
     () =>
@@ -216,84 +209,13 @@ const ChatInput = ({
 
         <Flex align="center" h="44px" justify="space-between" pb={2} pl={3} pr={3}>
           <Flex align="center" gap={2} minW={0}>
-            <Menu placement="top-start" isLazy>
-              <MenuButton
-                _hover={{ bg: "rgba(0, 0, 0, 0.04)" }}
-                aria-label={t("chat:tool_call_model", { defaultValue: "工具调用模型" })}
-                as={IconButton}
-                borderRadius="8px"
-                h="30px"
-                icon={
-                  selectedModelOption?.icon ? (
-                    <Box
-                      alt={selectedModelOption.label}
-                      as="img"
-                      borderRadius="999px"
-                      h="18px"
-                      objectFit="cover"
-                      src={selectedModelOption.icon}
-                      w="18px"
-                    />
-                  ) : (
-                    <Text color="#64748B" fontSize="14px" lineHeight="1">
-                      AI
-                    </Text>
-                  )
-                }
-                isDisabled={modelLoading || isSending || isSubmitting || modelOptions.length === 0}
-                minW="30px"
-                variant="ghost"
-              />
-              <MenuList maxH="240px" minW="220px" overflowY="auto" py={1}>
-                {modelOptions.length === 0 ? (
-                  <MenuItem isDisabled>
-                    {modelLoading
-                      ? t("chat:model_loading", { defaultValue: "加载模型中..." })
-                      : t("chat:model_empty", { defaultValue: "暂无可用模型" })}
-                  </MenuItem>
-                ) : (
-                  modelOptions.map((item) => (
-                    <MenuItem
-                      key={item.value}
-                      bg={item.value === model ? "#EFF6FF" : "transparent"}
-                      onClick={() => onChangeModel(item.value)}
-                    >
-                      <Flex align="center" gap={2} minW={0}>
-                        {item.icon ? (
-                          <Box
-                            alt={item.label}
-                            as="img"
-                            borderRadius="999px"
-                            h="18px"
-                            objectFit="cover"
-                            src={item.icon}
-                            w="18px"
-                          />
-                        ) : (
-                          <Box
-                            alignItems="center"
-                            bg="#E2E8F0"
-                            borderRadius="999px"
-                            color="#475569"
-                            display="flex"
-                            fontSize="10px"
-                            h="18px"
-                            justifyContent="center"
-                            textTransform="uppercase"
-                            w="18px"
-                          >
-                            {item.label.slice(0, 1)}
-                          </Box>
-                        )}
-                        <Text className="textEllipsis" fontSize="sm">
-                          {item.label}
-                        </Text>
-                      </Flex>
-                    </MenuItem>
-                  ))
-                )}
-              </MenuList>
-            </Menu>
+            <ModelCascader
+              disabled={Boolean(modelLoading || isSending || isSubmitting)}
+              loading={modelLoading}
+              model={model}
+              modelOptions={modelOptions}
+              onChangeModel={onChangeModel}
+            />
             {isSending ? (
               <Text color="myGray.500" fontSize="xs">
                 {t("chat:generating", { defaultValue: "正在生成回复..." })}

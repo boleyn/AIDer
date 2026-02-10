@@ -1,4 +1,4 @@
-import { getChatModelCatalog } from "@server/aiProxy/modelCatalog";
+import { getChatModelCatalog } from "@server/aiProxy/catalogStore";
 import { requireAuth } from "@server/auth/session";
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -13,7 +13,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!auth) return;
 
   const forceRefresh = req.query.refresh === "1";
-  const catalog = await getChatModelCatalog(forceRefresh);
+  const key = typeof req.query.key === "string" ? req.query.key : undefined;
+  const catalog = await getChatModelCatalog({ forceRefresh, key });
 
   res.status(200).json(catalog);
 }

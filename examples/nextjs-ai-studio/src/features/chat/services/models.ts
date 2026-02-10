@@ -1,9 +1,16 @@
 import { withAuthHeaders } from "@features/auth/client/authClient";
 
 export interface ChatModelCatalog {
+  channels: Array<{
+    id: string;
+    label: string;
+    source: "aiproxy" | "env";
+  }>;
+  defaultChannel: string;
   models: Array<{
     id: string;
     label: string;
+    channel: string;
     source: "aiproxy" | "env";
   }>;
   defaultModel: string;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getProject, updateFile } from "../projects/projectStorage";
+import { getProject, hasProjectFilesDir, updateFile } from "../projects/projectStorage";
 
 export type ChangeTracker = {
   changed: boolean;
@@ -89,6 +89,12 @@ async function getProjectFiles(token: string) {
   if (!project) {
     throw new Error("项目不存在");
   }
+
+  const hasFilesDir = await hasProjectFilesDir(token);
+  if (!hasFilesDir) {
+    throw new Error("项目文件目录缺失，请先保存一次项目文件后再试");
+  }
+
   return project.files;
 }
 
