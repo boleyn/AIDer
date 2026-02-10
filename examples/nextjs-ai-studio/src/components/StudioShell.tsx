@@ -220,26 +220,36 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
     }
   }, [token, files, projectName]);
 
-  const handleDownload = useCallback(() => {
-    const currentFiles = latestFilesRef.current || files;
-    if (!currentFiles) return;
-    
-    const projectData = {
-      template,
-      files: Object.entries(currentFiles).map(([path, file]) => ({
-        path,
-        code: file.code,
-      })),
-      dependencies,
-    };
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${projectName || "project"}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [files, template, dependencies, projectName]);
+  const handleDownload = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      const response = await fetch(`/api/code?token=${encodeURIComponent(token)}&action=download`, {
+        headers: withAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(`下载失败: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const utf8FilenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const asciiFilenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = utf8FilenameMatch?.[1]
+        ? decodeURIComponent(utf8FilenameMatch[1])
+        : asciiFilenameMatch?.[1] || `${projectName || "project"}.zip`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to download project zip:", error);
+    }
+  }, [token, projectName]);
 
   const handleFilesChange = useCallback((nextFiles: SandpackFiles) => {
     latestFilesRef.current = nextFiles;

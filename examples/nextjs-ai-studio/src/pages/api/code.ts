@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
+import JSZip from "jszip";
 import {
   getProject,
   updateProjectMeta,
@@ -31,6 +32,24 @@ const hasNonEmptyFiles = (files: unknown): files is Record<string, { code: strin
   return Object.keys(files as Record<string, unknown>).length > 0;
 };
 
+const normalizeZipPath = (filePath: string): string | null => {
+  const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized || normalized.includes("..")) {
+    return null;
+  }
+  return normalized;
+};
+
+const normalizeFilename = (name: string): string => {
+  const cleaned = name.trim().replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, " ");
+  return cleaned || "project";
+};
+
+const toAsciiFilename = (name: string): string => {
+  const ascii = name.replace(/[^\x20-\x7E]/g, "_").replace(/"/g, "_").trim();
+  return ascii || "project.zip";
+};
+
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   const auth = await requireAuth(req, res);
   if (!auth) return;
@@ -52,6 +71,40 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       }
       if (project.userId && project.userId !== userId) {
         res.status(403).json({ error: "无权访问该项目" });
+        return;
+      }
+
+      const action = typeof req.query.action === "string" ? req.query.action : "";
+
+      if (action === "download") {
+        const zip = new JSZip();
+        Object.entries(project.files).forEach(([filePath, file]) => {
+          const zipPath = normalizeZipPath(filePath);
+          if (!zipPath) return;
+          zip.file(zipPath, file.code ?? "");
+        });
+
+        if (Object.keys(zip.files).length === 0) {
+          res.status(400).json({ error: "项目文件为空，无法下载" });
+          return;
+        }
+
+        const zipBuffer = await zip.generateAsync({
+          type: "nodebuffer",
+          compression: "DEFLATE",
+          compressionOptions: { level: 9 },
+        });
+        const filename = `${normalizeFilename(project.name || "project")}.zip`;
+        const asciiFilename = toAsciiFilename(filename);
+
+        res.setHeader("Cache-Control", "private, no-store, must-revalidate");
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+        );
+        res.setHeader("Content-Length", String(zipBuffer.length));
+        res.status(200).send(zipBuffer);
         return;
       }
 
