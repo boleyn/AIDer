@@ -15,16 +15,19 @@ export const getExecutionSummary = (
   const responseData = Array.isArray((meta as { responseData?: unknown }).responseData)
     ? ((meta as { responseData?: unknown[] }).responseData ?? [])
     : [];
+  const toolDetails = Array.isArray((meta as { toolDetails?: unknown }).toolDetails)
+    ? ((meta as { toolDetails?: unknown[] }).toolDetails ?? [])
+    : [];
+  const nodeCount = Math.max(responseData.length, toolDetails.length);
   const durationSeconds =
     typeof (meta as { durationSeconds?: unknown }).durationSeconds === "number"
       ? ((meta as { durationSeconds?: number }).durationSeconds ?? 0)
       : undefined;
 
-  if (responseData.length === 0 && durationSeconds === undefined) return null;
+  if (nodeCount === 0 && durationSeconds === undefined) return null;
 
   return {
-    nodeCount: responseData.length,
+    nodeCount,
     durationSeconds,
   };
 };
-

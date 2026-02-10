@@ -10,6 +10,10 @@ export type StreamQueueItem =
       text?: string;
     }
   | {
+      event: typeof SseResponseEventEnum.reasoning;
+      text?: string;
+    }
+  | {
       event:
         | typeof SseResponseEventEnum.toolCall
         | typeof SseResponseEventEnum.toolParams
@@ -144,6 +148,11 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: Stream
             const text = parseJson?.choices?.[0]?.delta?.content || "";
             for (const ch of text) {
               pushDataToQueue({ event: SseResponseEventEnum.answer, text: ch });
+            }
+          } else if (event === SseResponseEventEnum.reasoning) {
+            const text = typeof parseJson?.text === "string" ? parseJson.text : "";
+            for (const ch of text) {
+              pushDataToQueue({ event: SseResponseEventEnum.reasoning, text: ch });
             }
           } else if (
             event === SseResponseEventEnum.toolCall ||

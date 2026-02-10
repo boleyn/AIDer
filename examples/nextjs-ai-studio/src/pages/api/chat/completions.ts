@@ -255,6 +255,22 @@ const PROJECT_LOCAL_TOOL_NAMES = new Set([
   "global",
 ]);
 
+const MCP_TOOL_NAME_PREFIX = "mcp_";
+
+const isMcpToolName = (toolName: string) => toolName.startsWith(MCP_TOOL_NAME_PREFIX);
+
+const isProjectKnowledgeMcpTool = (toolName: string) => {
+  if (!isMcpToolName(toolName)) return false;
+  const normalized = toolName.toLowerCase();
+  return (
+    normalized.includes("gitlab") ||
+    normalized.includes("kb") ||
+    normalized.includes("knowledge") ||
+    normalized.includes("analysis") ||
+    normalized.includes("project")
+  );
+};
+
 type UserIntent = "tooling" | "coding" | "general";
 
 type ToolRouteResult = {
@@ -301,7 +317,7 @@ const routeToolsByIntent = (allTools: AgentToolDefinition[], intent: UserIntent)
 
   if (intent === "coding") {
     const codingTools = allTools.filter(
-      (tool) => PROJECT_LOCAL_TOOL_NAMES.has(tool.name) || tool.name.startsWith("mcp_mcp-gitlab-kb__")
+      (tool) => PROJECT_LOCAL_TOOL_NAMES.has(tool.name) || isMcpToolName(tool.name)
     );
 
     if (codingTools.length > 0) {
@@ -334,7 +350,7 @@ const buildToolRoutingSystemPrompt = (
     intent === "tooling"
       ? "Current task intent is tooling. Prefer replace_in_file/write_file/read_file/search_in_files/list_files and make concrete file edits."
       : intent === "coding"
-      ? "Current task intent is coding. Prioritize project code tools and MCP KB tools. Read/search before write."
+      ? "Current task intent is coding. Prioritize project code tools and available MCP reference tools. Read/search before write."
       : "Current task intent is general. Use tools only when they materially improve correctness.";
   const mandatoryRule =
     toolChoiceMode === "required"
@@ -405,6 +421,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             finish_reason: finishReason,
           },
         ],
+      })
+    );
+  };
+  const emitReasoningChunk = (text: string) => {
+    sendSseEvent(
+      res,
+      SseResponseEventEnum.reasoning,
+      JSON.stringify({
+        text,
       })
     );
   };
@@ -537,7 +562,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const selectedTools = routedTools.selectedTools;
   const toolChoiceMode = selectedTools.length > 0 ? resolveToolChoice(userIntent) : "auto";
   const toolRoutingPrompt = buildToolRoutingSystemPrompt(userIntent, routedTools, toolChoiceMode);
-  const hasGitlabKbTools = selectedTools.some((tool) => tool.name.startsWith("mcp_mcp-gitlab-kb__"));
+  const hasMcpTools = selectedTools.some((tool) => isMcpToolName(tool.name));
+  const hasProjectKnowledgeTools = selectedTools.some((tool) => isProjectKnowledgeMcpTool(tool.name));
   const requestedModel = model && model !== "agent" ? model : runtimeConfig.toolCallModel;
   const catalog = await getChatModelCatalog({ key: modelCatalogKey }).catch(() => ({
     models: [] as Array<{ id: string; label: string; channel: string; source: "aiproxy" | "env" }>,
@@ -610,7 +636,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     }) as ChatCompletionMessageParam[];
 
-  const shouldInjectSkillPrompt = userIntent === "coding" && hasGitlabKbTools;
+  const shouldInjectSkillPrompt = userIntent === "coding" && (hasMcpTools || selectedTools.length === 0);
   const skillPrompt = shouldInjectSkillPrompt ? await getAgentRuntimeSkillPrompt() : "";
   const baseAgentMessages = toAgentMessages(contextMessages);
   const systemPrompts: ChatCompletionMessageParam[] = [
@@ -623,7 +649,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.info("[agent-skill] injection", {
     enabled: Boolean(skillPrompt),
     shouldInjectSkillPrompt,
-    hasGitlabKbTools,
+    hasMcpTools,
+    hasProjectKnowledgeTools,
     skillPromptLength: skillPrompt.length,
     userIntent,
     routeReason: routedTools.reason,
@@ -669,6 +696,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return;
         }
 
+        if (event === SseResponseEventEnum.reasoning) {
+          const text = typeof data.text === "string" ? data.text : "";
+          if (!text) return;
+          emitReasoningChunk(text);
+          return;
+        }
+
         sendSseEvent(res, event, JSON.stringify(data));
       },
     });
@@ -679,7 +713,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     runtimeConfig.toolCallModel,
   ].filter((item): item is string => Boolean(item && item !== selectedModel));
 
-  const { runResult, finalMessage, flowResponses } = await (async () => {
+  const { runResult, finalMessage, finalReasoning, flowResponses } = await (async () => {
     try {
       return await tryRunWorkflow(selectedModel);
     } catch (error) {
@@ -757,6 +791,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         content: currentText || resolvedFinalMessage,
         additional_kwargs: {
           ...currentKwargs,
+          reasoning_text: finalReasoning,
           toolDetails: existingToolDetails.length > 0 ? existingToolDetails : toolDetailsFromFlow,
           responseData: flowResponses,
           durationSeconds,
@@ -768,6 +803,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         content: resolvedFinalMessage,
         id: createId(),
         additional_kwargs: {
+          reasoning_text: finalReasoning,
           toolDetails: toolDetailsFromFlow,
           responseData: flowResponses,
           durationSeconds,

@@ -87,6 +87,16 @@ const getToolDetails = (message: ConversationMessage): ToolDetail[] => {
     }));
 };
 
+const getReasoningText = (message: ConversationMessage): string => {
+  if (!message.additional_kwargs || typeof message.additional_kwargs !== "object") return "";
+  const kwargs = message.additional_kwargs as {
+    reasoning_text?: unknown;
+    reasoning_content?: unknown;
+  };
+  const value = kwargs.reasoning_text ?? kwargs.reasoning_content;
+  return typeof value === "string" ? value : "";
+};
+
 const truncateDetailText = (value?: string) => {
   if (!value) return "";
   const normalized = value.trim();
@@ -115,6 +125,8 @@ const ChatItem = ({
 
   const files = useMemo(() => getMessageFiles(message), [message]);
   const toolDetails = useMemo(() => getToolDetails(message), [message]);
+  const reasoningText = useMemo(() => getReasoningText(message), [message]);
+  const [isReasoningExpanded, setIsReasoningExpanded] = useState(false);
   const [expandedToolKeys, setExpandedToolKeys] = useState<Record<string, boolean>>({});
   const [detailModalData, setDetailModalData] = useState<{ title: string; content: string } | null>(null);
   const { isOpen: isDetailModalOpen, onOpen: openDetailModal, onClose: closeDetailModal } = useDisclosure();
@@ -143,7 +155,8 @@ const ChatItem = ({
     setDetailModalData(null);
   }, [closeDetailModal]);
 
-  if (!content.trim() && !isStreaming && files.length === 0 && toolDetails.length === 0) return null;
+  const hasReasoning = reasoningText.trim().length > 0;
+  if (!content.trim() && !isStreaming && files.length === 0 && toolDetails.length === 0 && !hasReasoning) return null;
 
   return (
     <Flex justify={isUser ? "flex-end" : "flex-start"} w="full">
@@ -194,6 +207,65 @@ const ChatItem = ({
           </Text>
         ) : (
           <Flex direction="column" gap={2}>
+            {hasReasoning ? (
+              <Box
+                bg="rgba(248,250,252,0.96)"
+                border="1px solid"
+                borderColor="rgba(203,213,225,0.92)"
+                borderRadius="10px"
+                p={2.5}
+              >
+                <Flex align="center" gap={2}>
+                  <Text color="gray.700" flex="1" fontSize="12px" fontWeight="600" noOfLines={1}>
+                    思考过程
+                  </Text>
+                  {isStreaming ? (
+                    <Text color="blue.500" fontSize="11px">
+                      思考中...
+                    </Text>
+                  ) : null}
+                  <IconButton
+                    aria-label={isReasoningExpanded ? "收起思考" : "展开思考"}
+                    icon={
+                      <Icon
+                        boxSize={4}
+                        color="gray.500"
+                        transform={isReasoningExpanded ? "rotate(180deg)" : "rotate(0deg)"}
+                        transition="transform 0.2s ease"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M6 9L12 15L18 9"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
+                      </Icon>
+                    }
+                    minW="24px"
+                    h="24px"
+                    onClick={() => setIsReasoningExpanded((prev) => !prev)}
+                    size="xs"
+                    variant="ghost"
+                  />
+                </Flex>
+
+                <Collapse animateOpacity in={isReasoningExpanded}>
+                  <Box
+                    borderLeft="2px solid"
+                    borderColor="gray.300"
+                    color="gray.600"
+                    mt={2}
+                    pl={2.5}
+                  >
+                    <Markdown source={reasoningText} />
+                  </Box>
+                </Collapse>
+              </Box>
+            ) : null}
+
             {toolDetails.length > 0 ? (
               <Flex direction="column" gap={2}>
                 {toolDetails.map((tool, index) => {

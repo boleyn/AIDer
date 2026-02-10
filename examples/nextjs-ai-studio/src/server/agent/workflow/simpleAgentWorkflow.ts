@@ -33,6 +33,7 @@ interface RunSimpleAgentWorkflowInput {
 interface RunSimpleAgentWorkflowResult {
   runResult: Awaited<ReturnType<typeof runAgentCall>>;
   finalMessage: string;
+  finalReasoning: string;
   flowResponses: SimpleWorkflowNodeResponse[];
 }
 
@@ -101,8 +102,7 @@ export const runSimpleAgentWorkflow = async ({
     },
     onReasoning: ({ text }) => {
       if (!text) return;
-      // Some models stream only reasoning tokens; forward them to avoid blank UI output.
-      onEvent?.(SseResponseEventEnum.answer, { text });
+      onEvent?.(SseResponseEventEnum.reasoning, { text });
     },
     onToolCall: ({ call }) => {
       onEvent?.(SseResponseEventEnum.toolCall, {
@@ -221,6 +221,7 @@ export const runSimpleAgentWorkflow = async ({
   return {
     runResult,
     finalMessage: finalMessage || finalReasoning,
+    finalReasoning,
     flowResponses,
   };
 };

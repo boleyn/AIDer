@@ -58,6 +58,10 @@ interface ToolStreamPayload {
   response?: string;
 }
 
+interface ReasoningStreamPayload {
+  text?: string;
+}
+
 interface WorkflowDurationPayload {
   durationSeconds?: number;
 }
@@ -225,7 +229,27 @@ const ChatPanel = ({
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamingConversationIdRef = useRef<string | null>(null);
   const streamingTextRef = useRef("");
+  const streamingReasoningRef = useRef("");
   const streamFlushFrameRef = useRef<number | null>(null);
+
+  const flushAssistantReasoning = useCallback((assistantMessageId: string, reasoningText: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== assistantMessageId) return msg;
+        const currentKwargs =
+          msg.additional_kwargs && typeof msg.additional_kwargs === "object"
+            ? msg.additional_kwargs
+            : {};
+        return {
+          ...msg,
+          additional_kwargs: {
+            ...currentKwargs,
+            reasoning_text: reasoningText,
+          },
+        };
+      })
+    );
+  }, []);
 
   const flushAssistantText = useCallback((assistantMessageId: string, content: string) => {
     setMessages((prev) =>
@@ -372,6 +396,7 @@ const ChatPanel = ({
 
       const assistantMessageId = createId();
       streamingTextRef.current = "";
+      streamingReasoningRef.current = "";
       if (streamFlushFrameRef.current !== null) {
         window.cancelAnimationFrame(streamFlushFrameRef.current);
         streamFlushFrameRef.current = null;
@@ -461,6 +486,13 @@ const ChatPanel = ({
               if (!item.text) return;
               streamingTextRef.current = `${streamingTextRef.current}${item.text}`;
               scheduleAssistantTextFlush(assistantMessageId);
+              return;
+            }
+            if (item.event === SseResponseEventEnum.reasoning) {
+              const reasoningPayload = item as ReasoningStreamPayload;
+              if (!reasoningPayload.text) return;
+              streamingReasoningRef.current = `${streamingReasoningRef.current}${reasoningPayload.text}`;
+              flushAssistantReasoning(assistantMessageId, streamingReasoningRef.current);
               return;
             }
             if (item.event === SseResponseEventEnum.toolCall) {
