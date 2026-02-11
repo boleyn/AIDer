@@ -1,5 +1,6 @@
 import { getAgentRuntimeConfig } from "@server/agent/runtimeConfig";
 import { promises as fs } from "fs";
+import JSON5 from "json5";
 import path from "path";
 
 export interface ChatModelOption {
@@ -164,7 +165,7 @@ export const warmupChatModelCatalogs = async () => {
 
   try {
     const rawText = await fs.readFile(filePath, "utf8");
-    const parsed = JSON.parse(rawText) as ConfigFileShape;
+    const parsed = JSON5.parse(rawText) as ConfigFileShape;
     const parsedEntries = (() => {
       if (Array.isArray(parsed?.model)) {
         return { default: parsed.model } as Record<string, unknown>;

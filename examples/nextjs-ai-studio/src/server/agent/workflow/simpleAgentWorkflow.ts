@@ -86,6 +86,8 @@ export const runSimpleAgentWorkflow = async ({
       tools,
       temperature,
       stream,
+      useVision: true,
+      requestOrigin: process.env.STORAGE_EXTERNAL_ENDPOINT || "http://127.0.0.1:3000",
       tool_choice: toolChoice,
       toolCallMode: "toolChoice",
     },

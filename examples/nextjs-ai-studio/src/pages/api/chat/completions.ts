@@ -145,6 +145,18 @@ const normalizeToolDetails = (value: unknown) => {
     }));
 };
 
+const isImageInputPart = (
+  value: unknown
+): value is { type: "image_url"; image_url: { url: string }; key?: string } => {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  if (record.type !== "image_url") return false;
+  if (typeof record.key !== "undefined" && typeof record.key !== "string") return false;
+  const imageUrl = record.image_url;
+  if (!imageUrl || typeof imageUrl !== "object") return false;
+  return typeof (imageUrl as Record<string, unknown>).url === "string";
+};
+
 const mergeAssistantToolMessages = (messages: ConversationMessage[]): ConversationMessage[] => {
   const output: ConversationMessage[] = [];
   const pendingCalls = new Map<string, { toolName?: string; params?: string }>();
@@ -470,7 +482,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   if (conversationId && newMessages.length > 0) {
-    await appendConversationMessages(token, conversationId, newMessages, nextTitleFromInput);
+    const sanitizedMessages = newMessages.map((message) => {
+      if (!message.additional_kwargs || typeof message.additional_kwargs !== "object") {
+        return message;
+      }
+
+      const { imageInputParts: _imageInputParts, ...rest } = message.additional_kwargs as Record<
+        string,
+        unknown
+      >;
+      return {
+        ...message,
+        additional_kwargs: Object.keys(rest).length > 0 ? rest : undefined,
+      };
+    });
+
+    await appendConversationMessages(token, conversationId, sanitizedMessages, nextTitleFromInput);
   }
 
   if (incomingMessages[incomingMessages.length - 1]?.role === "user") {
@@ -623,9 +650,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ? message.additional_kwargs.filePrompt
           : "";
 
+      const imageInputParts =
+        message.role === "user" && message.additional_kwargs
+          ? Array.isArray((message.additional_kwargs as Record<string, unknown>).imageInputParts)
+            ? ((message.additional_kwargs as Record<string, unknown>).imageInputParts as unknown[]).filter(
+                (item): item is { type: "image_url"; image_url: { url: string }; key?: string } =>
+                  isImageInputPart(item)
+              )
+            : []
+          : [];
+
       const content = filePrompt
         ? [baseText, "以下为用户附加文件内容:", filePrompt].filter(Boolean).join("\n\n")
         : baseText;
+
+      if (message.role === "user" && imageInputParts.length > 0) {
+        const textForImage = content.trim() || "用户上传了图片，请结合图片内容理解并回答。";
+        return {
+          role: message.role,
+          content: [{ type: "text", text: textForImage }, ...imageInputParts],
+          name: message.name,
+          tool_call_id: message.tool_call_id,
+          tool_calls: message.tool_calls,
+        } as ChatCompletionMessageParam;
+      }
 
       return {
         role: message.role,

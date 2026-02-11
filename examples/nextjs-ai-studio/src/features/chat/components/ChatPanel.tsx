@@ -6,6 +6,15 @@ import { useRouter } from "next/router";
 import { useTranslation } from "next-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConversations } from "../hooks/useConversations";
+import {
+  buildDownloadUrl,
+  buildPreviewUrl,
+  fetchMarkdownContent,
+  fetchMarkdownContentByUrl,
+  parseChatFiles,
+  type UploadedFileArtifact,
+  uploadChatFiles,
+} from "../services/files";
 import { getChatModels } from "../services/models";
 import type { ChatModelCatalog } from "../services/models";
 import type { ChatInputFile, ChatInputSubmitPayload } from "../types/chatInput";
@@ -41,15 +50,6 @@ const TEXT_FILE_EXTENSIONS = [
 ] as const;
 const MAX_TEXT_FILE_SIZE = 200 * 1024;
 const MAX_TEXT_FILE_PREVIEW = 3000;
-const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024;
-
-interface UploadedFileArtifact {
-  name: string;
-  size: number;
-  type: string;
-  lastModified: number;
-  storagePath: string;
-}
 
 interface ToolStreamPayload {
   id?: string;
@@ -106,67 +106,101 @@ const buildFilePrompt = async (files: ChatInputFile[]) => {
   return sections.join("\n\n");
 };
 
+const buildFilePromptFromArtifacts = (files: UploadedFileArtifact[]) => {
+  if (!files.length) return "";
+
+  const sections = files.map((file) => {
+    const header = `### 文件: ${file.name}`;
+    const markdown = typeof file.parse?.markdown === "string" ? file.parse.markdown.trim() : "";
+
+    if ((file.type || "").startsWith("image/") && file.previewUrl) {
+      return [header, `![${file.name}](${file.previewUrl})`].join("\n\n");
+    }
+
+    if (markdown) {
+      return [header, markdown].join("\n\n");
+    }
+
+    return `${header}\n\n该文件当前无可解析正文，仅提供元信息。`;
+  });
+
+  return sections.join("\n\n");
+};
+
+const buildUserBubbleContent = ({
+  text,
+  files,
+}: {
+  text: string;
+  files: UploadedFileArtifact[];
+}) => {
+  const trimmedText = text.trim();
+  const imageMarkdown = files
+    .filter((file) => (file.type || "").startsWith("image/") && file.previewUrl)
+    .map((file) => `![${file.name || "image"}](${file.previewUrl})`)
+    .join("\n\n");
+
+  if (!imageMarkdown) return trimmedText;
+  if (!trimmedText) return imageMarkdown;
+  return `${trimmedText}\n\n${imageMarkdown}`;
+};
+
+const hydrateArtifactsMarkdown = async (files: UploadedFileArtifact[]) => {
+  const hydrated = await Promise.all(
+    files.map(async (file) => {
+      const markdown = file.markdownPublicUrl
+        ? await fetchMarkdownContentByUrl(file.markdownPublicUrl).catch(() => "")
+        : file.markdownStoragePath
+        ? await fetchMarkdownContent(file.markdownStoragePath).catch(() => "")
+        : "";
+      if (!markdown) return file;
+      return {
+        ...file,
+        parse: {
+          ...(file.parse || {
+            status: "success" as const,
+            progress: 100,
+            parser: "text" as const,
+          }),
+          markdown,
+        },
+      };
+    })
+  );
+
+  return hydrated;
+};
+
 const toFileArtifacts = (files: ChatInputFile[]) =>
   files.map((item) => ({
+    id: item.id,
     name: item.file.name,
     size: item.file.size,
     type: item.file.type,
     lastModified: item.file.lastModified,
+    parse: {
+      status: "pending" as const,
+      progress: 0,
+      parser: "metadata" as const,
+      markdown: "",
+    },
   }));
 
-const fileToBase64 = async (file: File) => {
-  const buffer = await file.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-};
+const getImageInputParts = async (files: UploadedFileArtifact[]) => {
+  const imageFiles = files
+    .filter((item) => (item.type || "").startsWith("image/") && item.storagePath)
+    .slice(0, 4);
 
-const uploadChatFiles = async ({
-  token,
-  chatId,
-  files,
-}: {
-  token: string;
-  chatId: string;
-  files: ChatInputFile[];
-}): Promise<UploadedFileArtifact[]> => {
-  const uploadable = files.filter((item) => item.file.size <= MAX_UPLOAD_FILE_SIZE);
-  if (uploadable.length === 0) return [];
-
-  const payload = await Promise.all(
-    uploadable.map(async (item) => ({
-      name: item.file.name,
-      type: item.file.type,
-      lastModified: item.file.lastModified,
-      contentBase64: await fileToBase64(item.file),
+  return imageFiles
+    .filter((item) => (item.size || 0) <= 4 * 1024 * 1024)
+    .map((item) => ({
+      type: "image_url" as const,
+      image_url: {
+        url: item.previewUrl || item.publicUrl || "",
+      },
+      key: item.storagePath,
     }))
-  );
-
-  const response = await fetch("/api/core/chat/files/upload", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...withAuthHeaders(),
-    },
-    body: JSON.stringify({
-      token,
-      chatId,
-      files: payload,
-    }),
-  });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(typeof data?.error === "string" ? data.error : "上传失败");
-  }
-
-  const data = (await response.json()) as { files?: UploadedFileArtifact[] };
-  return Array.isArray(data.files) ? data.files : [];
+    .filter((item) => item.image_url.url || item.key);
 };
 
 const toUpdatedFilesMap = (value: unknown): Record<string, { code: string }> | null => {
@@ -359,31 +393,158 @@ const ChatPanel = ({
 
       const conversation = await ensureConversation();
       const conversationId = conversation?.id ?? activeConversation?.id;
+      const uploadChatId = conversationId || createId();
 
-      const filePrompt = await buildFilePrompt(payload.files);
       const displayText = text || `已上传 ${payload.files.length} 个文件`;
       const nextConversationTitle = buildConversationTitle(text);
+
+      const userMessageId = createId();
+      const fallbackArtifacts = toFileArtifacts(payload.files);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "user",
+          content: displayText,
+          id: userMessageId,
+          artifact:
+            payload.files.length > 0
+              ? {
+                  files: fallbackArtifacts,
+                }
+              : undefined,
+        },
+      ]);
+
+      const updateUserFiles = (
+        updater: (current: UploadedFileArtifact[]) => UploadedFileArtifact[]
+      ) => {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id !== userMessageId) return msg;
+            const currentArtifact =
+              msg.artifact && typeof msg.artifact === "object"
+                ? (msg.artifact as { files?: unknown })
+                : undefined;
+            const currentFiles = Array.isArray(currentArtifact?.files)
+              ? (currentArtifact.files as UploadedFileArtifact[])
+              : [];
+            return {
+              ...msg,
+              artifact: {
+                files: updater(currentFiles),
+              },
+            };
+          })
+        );
+      };
+
       const uploadedFiles =
-        payload.files.length > 0 && conversationId
-          ? await uploadChatFiles({ token, chatId: conversationId, files: payload.files }).catch(
-              () => []
-            )
+        payload.files.length > 0
+          ? await uploadChatFiles({
+              token,
+              chatId: uploadChatId,
+              files: payload.files,
+              onProgress: (phase, progress) => {
+                updateUserFiles((current) =>
+                  current.map((file) => ({
+                    ...file,
+                    parse: {
+                      status: phase === "done" ? "success" : file.parse?.status || "pending",
+                      progress: Math.max(file.parse?.progress || 0, progress),
+                      parser: file.parse?.parser || "metadata",
+                      markdown: file.parse?.markdown,
+                      error: file.parse?.error,
+                    },
+                  }))
+                );
+              },
+            }).catch(() => [])
           : [];
+
+      const parsedFiles =
+        uploadedFiles.length > 0
+          ? await parseChatFiles({
+              files: uploadedFiles,
+              onProgress: (phase, progress) => {
+                updateUserFiles((current) =>
+                  current.map((file) => ({
+                    ...file,
+                    parse: {
+                      status: phase === "done" ? "success" : file.parse?.status || "pending",
+                      progress: Math.max(file.parse?.progress || 0, progress),
+                      parser: file.parse?.parser || "metadata",
+                      markdown: file.parse?.markdown,
+                      error: file.parse?.error,
+                    },
+                  }))
+                );
+              },
+            }).catch(() => uploadedFiles)
+          : uploadedFiles;
+
+      const uploadedWithPreview =
+        parsedFiles.length > 0
+          ? parsedFiles.map((file) => {
+              const previewUrl = file.publicUrl
+                ? buildPreviewUrl({
+                    publicUrl: file.publicUrl,
+                  })
+                : undefined;
+              const downloadUrl = file.storagePath
+                ? buildDownloadUrl({
+                    storagePath: file.storagePath,
+                  })
+                : undefined;
+
+              return {
+                ...file,
+                previewUrl,
+                downloadUrl,
+              };
+            })
+          : [];
+
+      const uploadedHydrated =
+        uploadedWithPreview.length > 0 ? await hydrateArtifactsMarkdown(uploadedWithPreview) : uploadedWithPreview;
+
+      if (uploadedWithPreview.length > 0) {
+        updateUserFiles((current) =>
+          current.map((file) => {
+            const matchedById =
+              file.id && uploadedHydrated.find((uploaded) => uploaded.id && uploaded.id === file.id);
+            if (matchedById) return matchedById;
+
+            const matchedByName = uploadedHydrated.find(
+              (uploaded) => uploaded.name === file.name && uploaded.size === file.size
+            );
+            return matchedByName || file;
+          })
+        );
+      }
+
+      const finalArtifacts = uploadedHydrated.length > 0 ? uploadedHydrated : fallbackArtifacts;
+      updateUserFiles(() => finalArtifacts);
+
+      const filePrompt =
+        uploadedHydrated.length > 0
+          ? buildFilePromptFromArtifacts(uploadedHydrated)
+          : await buildFilePrompt(payload.files);
+      const imageInputParts = await getImageInputParts(finalArtifacts);
 
       if (conversationId && nextConversationTitle) {
         updateConversationTitle(conversationId, nextConversationTitle);
       }
 
+      const userBubbleContent = buildUserBubbleContent({
+        text,
+        files: finalArtifacts,
+      });
+
       const userMessage: ConversationMessage = {
         role: "user",
-        content: displayText,
-        id: createId(),
-        artifact:
-          payload.files.length > 0
-            ? {
-                files: uploadedFiles.length > 0 ? uploadedFiles : toFileArtifacts(payload.files),
-              }
-            : undefined,
+        content: userBubbleContent || displayText,
+        id: userMessageId,
+        artifact: payload.files.length > 0 ? { files: finalArtifacts } : undefined,
         additional_kwargs: filePrompt
           ? {
               filePrompt,
@@ -391,8 +552,21 @@ const ChatPanel = ({
           : undefined,
       };
 
-      setMessages((prev) => [...prev, userMessage]);
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== userMessageId) return msg;
+          return userMessage;
+        })
+      );
       setIsSending(true);
+
+      const requestMessage: ConversationMessage = {
+        ...userMessage,
+        additional_kwargs: {
+          ...(userMessage.additional_kwargs || {}),
+          imageInputParts,
+        },
+      };
 
       const assistantMessageId = createId();
       streamingTextRef.current = "";
@@ -472,7 +646,7 @@ const ChatPanel = ({
           url: `/api/chat/completions`,
           data: {
             token,
-            messages: [userMessage],
+            messages: [requestMessage],
             stream: true,
             ...(conversationId ? { conversationId } : {}),
             channel,

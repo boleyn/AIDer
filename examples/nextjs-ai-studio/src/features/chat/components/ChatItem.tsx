@@ -23,9 +23,19 @@ import { useCopyData } from "@/hooks/useCopyData";
 import type { ConversationMessage } from "@/types/conversation";
 
 interface MessageFile {
+  id?: string;
   name?: string;
   size?: number;
   type?: string;
+  storagePath?: string;
+  previewUrl?: string;
+  downloadUrl?: string;
+  parse?: {
+    status?: "success" | "error" | "skipped";
+    progress?: number;
+    parser?: string;
+    error?: string;
+  };
 }
 
 interface ToolDetail {
@@ -50,6 +60,36 @@ const getMessageFiles = (message: ConversationMessage): MessageFile[] => {
   const files = (message.artifact as { files?: unknown }).files;
   if (!Array.isArray(files)) return [];
   return files.filter((file): file is MessageFile => Boolean(file && typeof file === "object"));
+};
+
+const hasImageInContent = (content: string) => /!\[[^\]]*\]\([^\)]*\)/.test(content);
+
+const isImageFile = (file: MessageFile) => {
+  if (typeof file.type === "string" && file.type.startsWith("image/")) return true;
+  const name = typeof file.name === "string" ? file.name.toLowerCase() : "";
+  return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"].some((ext) =>
+    name.endsWith(ext)
+  );
+};
+
+const getParseStatusLabel = (file: MessageFile) => {
+  const parse = file.parse;
+  if (!parse) return "待处理";
+  if (isImageFile(file)) {
+    if (parse.status === "error") return "处理失败";
+    if (parse.status === "success") return "已上传";
+    return "上传中";
+  }
+  if (parse.status === "success") return `解析完成 ${Math.max(0, Math.min(100, parse.progress || 0))}%`;
+  if (parse.status === "error") return `解析失败 ${Math.max(0, Math.min(100, parse.progress || 0))}%`;
+  if (parse.status === "skipped") return `已跳过 ${Math.max(0, Math.min(100, parse.progress || 0))}%`;
+  return "处理中";
+};
+
+const buildImageMarkdown = (file: MessageFile) => {
+  if (!file.previewUrl) return "";
+  const alt = file.name || "image";
+  return `![${alt}](${file.previewUrl})`;
 };
 
 const getToolDetails = (message: ConversationMessage): ToolDetail[] => {
@@ -156,6 +196,7 @@ const ChatItem = ({
   }, [closeDetailModal]);
 
   const hasReasoning = reasoningText.trim().length > 0;
+  const containsImageMarkdown = isUser ? hasImageInContent(content) : false;
   if (!content.trim() && !isStreaming && files.length === 0 && toolDetails.length === 0 && !hasReasoning) return null;
 
   return (
@@ -182,18 +223,75 @@ const ChatItem = ({
       >
         {isUser ? (
           <Flex direction="column" gap={2}>
-            {files.length > 0 ? (
+            {files.length > 0 && !containsImageMarkdown ? (
               <Box bg="white" border="1px solid" borderColor="blue.100" borderRadius="md" p={2}>
                 <Text color="blue.700" fontSize="xs" fontWeight="700" mb={1.5}>
                   {t("chat:attachments", { defaultValue: "附件" })}
                 </Text>
                 <Flex direction="column" gap={1}>
                   {files.map((file, index) => (
-                    <Text key={`${file.name || "file"}-${index}`} color="gray.700" fontSize="xs">
-                      {file.name || `文件 ${index + 1}`}
-                      {file.type ? ` · ${file.type}` : ""}
-                      {formatFileSize(file.size) ? ` · ${formatFileSize(file.size)}` : ""}
-                    </Text>
+                    <Box key={`${file.name || "file"}-${index}`}>
+                      {isImageFile(file) && file.previewUrl ? (
+                        <Box
+                          border="1px solid"
+                          borderColor="gray.200"
+                          borderRadius="8px"
+                          maxW="220px"
+                          mb={1}
+                          overflow="hidden"
+                          p={1}
+                        >
+                          <Markdown source={buildImageMarkdown(file)} />
+                        </Box>
+                      ) : null}
+
+                      <Flex align="center" gap={2} wrap="wrap">
+                        <Text color="gray.700" fontSize="xs">
+                          {file.name || `文件 ${index + 1}`}
+                          {file.type ? ` · ${file.type}` : ""}
+                          {formatFileSize(file.size) ? ` · ${formatFileSize(file.size)}` : ""}
+                        </Text>
+                        <Text color="gray.500" fontSize="11px">
+                          {getParseStatusLabel(file)}
+                        </Text>
+                        {file.previewUrl ? (
+                          <Button
+                            as="a"
+                            colorScheme="blue"
+                            fontSize="10px"
+                            h="20px"
+                            href={file.previewUrl}
+                            px={2}
+                            size="xs"
+                            target="_blank"
+                            variant="ghost"
+                          >
+                            预览
+                          </Button>
+                        ) : null}
+                        {file.downloadUrl ? (
+                          <Button
+                            as="a"
+                            colorScheme="blue"
+                            fontSize="10px"
+                            h="20px"
+                            href={file.downloadUrl}
+                            px={2}
+                            size="xs"
+                            target="_blank"
+                            variant="ghost"
+                          >
+                            下载
+                          </Button>
+                        ) : null}
+                      </Flex>
+
+                      {file.parse?.error ? (
+                        <Text color="orange.500" fontSize="11px">
+                          {file.parse.error}
+                        </Text>
+                      ) : null}
+                    </Box>
                   ))}
                 </Flex>
               </Box>
