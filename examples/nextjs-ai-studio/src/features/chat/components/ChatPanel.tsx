@@ -59,7 +59,7 @@ interface ToolStreamPayload {
 }
 
 interface ReasoningStreamPayload {
-  text?: string;
+  reasoningText?: string;
 }
 
 interface WorkflowDurationPayload {
@@ -607,16 +607,16 @@ const ChatPanel = ({
           onMessage: (item) => {
             if (abortCtrl.signal.aborted) return;
             if (item.event === SseResponseEventEnum.answer) {
-              if (!item.text) return;
-              streamingTextRef.current = `${streamingTextRef.current}${item.text}`;
-              scheduleAssistantTextFlush(assistantMessageId);
-              return;
-            }
-            if (item.event === SseResponseEventEnum.reasoning) {
-              const reasoningPayload = item as ReasoningStreamPayload;
-              if (!reasoningPayload.text) return;
-              streamingReasoningRef.current = `${streamingReasoningRef.current}${reasoningPayload.text}`;
-              scheduleAssistantReasoningFlush(assistantMessageId);
+              const answerPayload = item as { text?: string; reasoningText?: string };
+              if (answerPayload.reasoningText) {
+                const reasoningPayload = answerPayload as ReasoningStreamPayload;
+                streamingReasoningRef.current = `${streamingReasoningRef.current}${reasoningPayload.reasoningText}`;
+                scheduleAssistantReasoningFlush(assistantMessageId);
+              }
+              if (answerPayload.text) {
+                streamingTextRef.current = `${streamingTextRef.current}${answerPayload.text}`;
+                scheduleAssistantTextFlush(assistantMessageId);
+              }
               return;
             }
             if (item.event === SseResponseEventEnum.toolCall) {

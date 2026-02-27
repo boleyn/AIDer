@@ -196,6 +196,8 @@ const ChatItem = ({
   }, [closeDetailModal]);
 
   const hasReasoning = reasoningText.trim().length > 0;
+  const hasAnswerText = content.trim().length > 0;
+  const streamingPhaseText = isStreaming ? (hasAnswerText ? "回复中..." : "思考中...") : "";
   const containsImageMarkdown = isUser ? hasImageInContent(content) : false;
   if (!content.trim() && !isStreaming && files.length === 0 && toolDetails.length === 0 && !hasReasoning) return null;
 
@@ -317,9 +319,9 @@ const ChatItem = ({
                   <Text color="gray.700" flex="1" fontSize="12px" fontWeight="600" noOfLines={1}>
                     思考过程
                   </Text>
-                  {isStreaming ? (
+                  {streamingPhaseText ? (
                     <Text color="blue.500" fontSize="11px">
-                      思考中...
+                      {streamingPhaseText}
                     </Text>
                   ) : null}
                   <IconButton

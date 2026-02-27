@@ -8,10 +8,7 @@ export type StreamQueueItem =
   | {
       event: typeof SseResponseEventEnum.answer;
       text?: string;
-    }
-  | {
-      event: typeof SseResponseEventEnum.reasoning;
-      text?: string;
+      reasoningText?: string;
     }
   | {
       event:
@@ -148,7 +145,7 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: Stream
             const text = parseJson?.choices?.[0]?.delta?.content || "";
             const reasoningText = parseJson?.choices?.[0]?.delta?.reasoning_content || "";
             if (reasoningText) {
-              pushDataToQueue({ event: SseResponseEventEnum.reasoning, text: reasoningText });
+              pushDataToQueue({ event: SseResponseEventEnum.answer, reasoningText });
             }
             for (const ch of text) {
               pushDataToQueue({ event: SseResponseEventEnum.answer, text: ch });
@@ -156,7 +153,7 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: Stream
           } else if (event === SseResponseEventEnum.reasoning) {
             const text = typeof parseJson?.text === "string" ? parseJson.text : "";
             if (text) {
-              pushDataToQueue({ event: SseResponseEventEnum.reasoning, text });
+              pushDataToQueue({ event: SseResponseEventEnum.answer, reasoningText: text });
             }
           } else if (
             event === SseResponseEventEnum.toolCall ||

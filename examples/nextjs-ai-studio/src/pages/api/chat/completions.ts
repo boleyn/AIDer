@@ -460,15 +460,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     );
   };
-  const emitReasoningChunk = (text: string) => {
-    sendSseEvent(
-      res,
-      SseResponseEventEnum.reasoning,
-      JSON.stringify({
-        text,
-      })
-    );
-  };
   const startStream = () => {
     if (streamStarted) return;
     startSse(res);
@@ -772,7 +763,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const text = typeof data.text === "string" ? data.text : "";
           if (!text) return;
           emitAnswerChunk("", null, text);
-          emitReasoningChunk(text);
           return;
         }
 
