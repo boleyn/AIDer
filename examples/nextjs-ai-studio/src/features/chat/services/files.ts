@@ -1,31 +1,9 @@
 import { withAuthHeaders } from "@features/auth/client/authClient";
 
 import type { ChatInputFile } from "../types/chatInput";
+import type { UploadedFileArtifact } from "../types/fileArtifact";
 
 const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024;
-
-export type ParseStatus = "pending" | "success" | "error" | "skipped";
-
-export interface UploadedFileArtifact {
-  id?: string;
-  name: string;
-  size: number;
-  type: string;
-  lastModified: number;
-  storagePath?: string;
-  publicUrl?: string;
-  markdownStoragePath?: string;
-  markdownPublicUrl?: string;
-  previewUrl?: string;
-  downloadUrl?: string;
-  parse?: {
-    status: ParseStatus;
-    progress: number;
-    parser: "text" | "customPdfParse" | "metadata";
-    markdown?: string;
-    error?: string;
-  };
-}
 
 interface PresignedUploadArtifact extends UploadedFileArtifact {
   storagePath: string;

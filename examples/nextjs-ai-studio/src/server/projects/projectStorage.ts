@@ -3,6 +3,12 @@ import { promises as fs } from "fs";
 import path from "path";
 import { ObjectId } from "mongodb";
 import { getMongoDb } from "../db/mongo";
+import {
+  deleteStorageObjects,
+  getObjectFromStorage,
+  listStorageObjectKeysByPrefix,
+  uploadObjectToStorage,
+} from "../storage/s3";
 
 export type ProjectFile = {
   code: string;
@@ -49,7 +55,9 @@ type ProjectDoc = {
 };
 
 const COLLECTION = "projects";
-const PROJECT_FILES_ROOT = path.join(process.cwd(), "data", "projects");
+const PROJECT_STORAGE_PREFIX = "projects";
+const PROJECT_STORAGE_FILES_SEGMENT = "files";
+const LEGACY_PROJECT_FILES_ROOT = path.join(process.cwd(), "data", "projects");
 
 const DEFAULT_PROJECT_FILES: Record<string, ProjectFile> = {
   "/index.js": {
@@ -159,15 +167,19 @@ async function ensureTokenIndex() {
   await coll.createIndex({ token: 1 }, { unique: true });
 }
 
-function getProjectDir(token: string): string {
-  return path.join(PROJECT_FILES_ROOT, token);
+function getLegacyProjectDir(token: string): string {
+  return path.join(LEGACY_PROJECT_FILES_ROOT, token);
 }
 
-function getRelativeFilesPath(token: string): string {
-  return path.posix.join("data", "projects", token);
+function getProjectStoragePrefix(token: string): string {
+  return path.posix.join(PROJECT_STORAGE_PREFIX, token, PROJECT_STORAGE_FILES_SEGMENT);
 }
 
-function toLocalFilePath(token: string, filePath: string): string {
+function getFilesMetaPath(token: string): string {
+  return getProjectStoragePrefix(token);
+}
+
+function toProjectStorageFileKey(token: string, filePath: string): string {
   const normalizedPosix = path.posix.normalize(filePath.startsWith("/") ? filePath : `/${filePath}`);
   if (!normalizedPosix.startsWith("/")) {
     throw new Error(`非法文件路径: ${filePath}`);
@@ -176,23 +188,91 @@ function toLocalFilePath(token: string, filePath: string): string {
   if (!relativePosix || relativePosix.startsWith("..") || relativePosix.includes("\0")) {
     throw new Error(`非法文件路径: ${filePath}`);
   }
+  return path.posix.join(getProjectStoragePrefix(token), relativePosix);
+}
 
-  const baseDir = getProjectDir(token);
-  const target = path.join(baseDir, ...relativePosix.split("/"));
-  const relativeCheck = path.relative(baseDir, target);
-  if (!relativeCheck || relativeCheck.startsWith("..") || path.isAbsolute(relativeCheck)) {
-    throw new Error(`非法文件路径: ${filePath}`);
+function toProjectFilePathFromStorageKey(token: string, storageKey: string): string {
+  const prefix = `${getProjectStoragePrefix(token).replace(/\/+$/, "")}/`;
+  if (!storageKey.startsWith(prefix)) {
+    throw new Error(`非法存储路径: ${storageKey}`);
   }
-  return target;
+  const relative = storageKey.slice(prefix.length).trim();
+  if (!relative || relative.startsWith("..") || relative.includes("\0")) {
+    throw new Error(`非法存储路径: ${storageKey}`);
+  }
+  return `/${relative}`;
 }
 
-async function ensureProjectDir(token: string): Promise<string> {
-  const dir = getProjectDir(token);
-  await fs.mkdir(dir, { recursive: true });
-  return dir;
+async function syncFileToStorage(token: string, filePath: string, code: string) {
+  await uploadObjectToStorage({
+    key: toProjectStorageFileKey(token, filePath),
+    body: code,
+    contentType: "text/plain; charset=utf-8",
+    bucketType: "private",
+  });
 }
 
-async function collectFilesFromDir(dir: string): Promise<Record<string, ProjectFile>> {
+async function syncFilesToStorage(token: string, files: Record<string, { code: string }>) {
+  await Promise.all(
+    Object.entries(files).map(async ([filePath, file]) => {
+      await syncFileToStorage(token, filePath, file.code ?? "");
+    })
+  );
+}
+
+async function listProjectStorageKeys(token: string): Promise<string[]> {
+  return listStorageObjectKeysByPrefix({
+    prefix: getProjectStoragePrefix(token),
+    bucketType: "private",
+  });
+}
+
+async function deleteProjectStorageFilesByKeys(keys: string[]): Promise<void> {
+  await deleteStorageObjects({
+    keys,
+    bucketType: "private",
+  });
+}
+
+async function replaceProjectFilesInStorage(
+  token: string,
+  files: Record<string, { code: string }>
+): Promise<void> {
+  const desiredKeys = new Set(
+    Object.keys(files).map((filePath) => toProjectStorageFileKey(token, filePath))
+  );
+  const existingKeys = await listProjectStorageKeys(token);
+
+  await syncFilesToStorage(token, files);
+
+  const staleKeys = existingKeys.filter((key) => !desiredKeys.has(key));
+  if (staleKeys.length > 0) {
+    await deleteProjectStorageFilesByKeys(staleKeys);
+  }
+}
+
+async function collectFilesFromStorage(token: string): Promise<Record<string, ProjectFile>> {
+  const keys = await listProjectStorageKeys(token);
+  if (keys.length === 0) {
+    return {};
+  }
+
+  const entries = await Promise.all(
+    keys.map(async (key) => {
+      const filePath = toProjectFilePathFromStorageKey(token, key);
+      const { buffer } = await getObjectFromStorage({
+        key,
+        bucketType: "private",
+      });
+      return [filePath, { code: buffer.toString("utf8") }] as const;
+    })
+  );
+
+  return Object.fromEntries(entries);
+}
+
+async function collectFilesFromLegacyDir(token: string): Promise<Record<string, ProjectFile>> {
+  const dir = getLegacyProjectDir(token);
   const files: Record<string, ProjectFile> = {};
 
   const walk = async (currentDir: string) => {
@@ -223,40 +303,19 @@ async function collectFilesFromDir(dir: string): Promise<Record<string, ProjectF
   return files;
 }
 
-export async function hasProjectFilesDir(token: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(getProjectDir(token));
-    return stat.isDirectory();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-}
-
-async function writeFilesToDir(token: string, files: Record<string, { code: string }>) {
-  await fs.rm(getProjectDir(token), { recursive: true, force: true });
-  await ensureProjectDir(token);
-
-  await Promise.all(
-    Object.entries(files).map(async ([filePath, file]) => {
-      const target = toLocalFilePath(token, filePath);
-      await fs.mkdir(path.dirname(target), { recursive: true });
-      await fs.writeFile(target, file.code, "utf8");
-    })
-  );
+async function cleanupLegacyDir(token: string): Promise<void> {
+  await fs.rm(getLegacyProjectDir(token), { recursive: true, force: true });
 }
 
 async function migrateLegacyFilesIfNeeded(doc: ProjectDoc, coll: Awaited<ReturnType<typeof getCollection>>) {
   const legacyFiles = doc.files;
   if (!legacyFiles || Object.keys(legacyFiles).length === 0) return;
 
-  await writeFilesToDir(doc.token, legacyFiles);
+  await syncFilesToStorage(doc.token, legacyFiles);
   await coll.updateOne(
     { token: doc.token },
     {
-      $set: { filesPath: getRelativeFilesPath(doc.token), updatedAt: new Date().toISOString() },
+      $set: { filesPath: getFilesMetaPath(doc.token), updatedAt: new Date().toISOString() },
       $unset: { files: "" },
     }
   );
@@ -264,24 +323,35 @@ async function migrateLegacyFilesIfNeeded(doc: ProjectDoc, coll: Awaited<ReturnT
 
 async function docToProject(doc: ProjectDoc, coll: Awaited<ReturnType<typeof getCollection>>): Promise<ProjectData> {
   await migrateLegacyFilesIfNeeded(doc, coll);
-  let files = await collectFilesFromDir(getProjectDir(doc.token));
+  let files = await collectFilesFromStorage(doc.token);
 
   if (Object.keys(files).length === 0) {
-    const hasDir = await hasProjectFilesDir(doc.token);
-    if (!hasDir) {
-      await writeFilesToDir(doc.token, DEFAULT_PROJECT_FILES);
+    const legacyDiskFiles = await collectFilesFromLegacyDir(doc.token);
+
+    if (Object.keys(legacyDiskFiles).length > 0) {
+      await syncFilesToStorage(doc.token, legacyDiskFiles);
+      await cleanupLegacyDir(doc.token);
       await coll.updateOne(
         { token: doc.token },
         {
-          $set: {
-            filesPath: getRelativeFilesPath(doc.token),
-            updatedAt: new Date().toISOString(),
-          },
+          $set: { filesPath: getFilesMetaPath(doc.token), updatedAt: new Date().toISOString() },
           $unset: { files: "" },
         }
       );
-      files = await collectFilesFromDir(getProjectDir(doc.token));
+      files = legacyDiskFiles;
+    } else {
+      await syncFilesToStorage(doc.token, DEFAULT_PROJECT_FILES);
+      await coll.updateOne(
+        { token: doc.token },
+        {
+          $set: { filesPath: getFilesMetaPath(doc.token), updatedAt: new Date().toISOString() },
+          $unset: { files: "" },
+        }
+      );
+      files = DEFAULT_PROJECT_FILES;
     }
+  } else {
+    await cleanupLegacyDir(doc.token);
   }
 
   return {
@@ -304,12 +374,20 @@ export function generateToken(): string {
 }
 
 /**
- * 根据 token 读取单个项目（元数据来自 MongoDB，文件来自本地目录）
+ * 根据 token 读取单个项目（元数据来自 MongoDB，文件来自对象存储）
  */
 export async function getProject(token: string): Promise<ProjectData | null> {
   const coll = await getCollection();
   const doc = await coll.findOne({ token });
   return doc ? docToProject(doc, coll) : null;
+}
+
+/**
+ * 检查对象存储中是否已存在项目文件
+ */
+export async function hasProjectFilesDir(token: string): Promise<boolean> {
+  const keys = await listProjectStorageKeys(token);
+  return keys.length > 0;
 }
 
 /**
@@ -336,28 +414,26 @@ export async function updateProjectMeta(
 }
 
 /**
- * 更新单个文件（保存到本地 data/projects/<token>）
+ * 更新单个文件（仅写入对象存储）
  */
 export async function updateFile(token: string, filePath: string, code: string): Promise<void> {
   const coll = await getCollection();
   const exists = await coll.findOne({ token }, { projection: { _id: 1 } });
   if (!exists) throw new Error("项目不存在");
 
-  const target = toLocalFilePath(token, filePath);
-  await ensureProjectDir(token);
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(target, code, "utf8");
+  await syncFileToStorage(token, filePath, code);
+  await cleanupLegacyDir(token);
 
   const now = new Date().toISOString();
   const result = await coll.updateOne(
     { token },
-    { $set: { updatedAt: now, filesPath: getRelativeFilesPath(token) }, $unset: { files: "" } }
+    { $set: { updatedAt: now, filesPath: getFilesMetaPath(token) }, $unset: { files: "" } }
   );
   if (result.matchedCount === 0) throw new Error("项目不存在");
 }
 
 /**
- * 更新多个文件（用传入 files 覆盖本地目录）
+ * 更新多个文件（用传入 files 覆盖对象存储中的项目目录）
  */
 export async function updateFiles(
   token: string,
@@ -367,22 +443,24 @@ export async function updateFiles(
   const exists = await coll.findOne({ token }, { projection: { _id: 1 } });
   if (!exists) throw new Error("项目不存在");
 
-  await writeFilesToDir(token, files);
+  await replaceProjectFilesInStorage(token, files);
+  await cleanupLegacyDir(token);
 
   const now = new Date().toISOString();
   const result = await coll.updateOne(
     { token },
-    { $set: { updatedAt: now, filesPath: getRelativeFilesPath(token) }, $unset: { files: "" } }
+    { $set: { updatedAt: now, filesPath: getFilesMetaPath(token) }, $unset: { files: "" } }
   );
   if (result.matchedCount === 0) throw new Error("项目不存在");
 }
 
 /**
- * 保存项目（元数据存 Mongo，文件存本地）
+ * 保存项目（元数据存 Mongo，文件仅存对象存储）
  */
 export async function saveProject(project: ProjectData): Promise<void> {
   await ensureTokenIndex();
-  await writeFilesToDir(project.token, project.files ?? {});
+  await replaceProjectFilesInStorage(project.token, project.files ?? {});
+  await cleanupLegacyDir(project.token);
 
   const coll = await getCollection();
   const doc: Omit<ProjectDoc, "_id"> = {
@@ -391,7 +469,7 @@ export async function saveProject(project: ProjectData): Promise<void> {
     template: project.template,
     userId: project.userId,
     dependencies: project.dependencies ?? {},
-    filesPath: getRelativeFilesPath(project.token),
+    filesPath: getFilesMetaPath(project.token),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -419,11 +497,13 @@ export async function listProjects(userId: string): Promise<ProjectListItem[]> {
 }
 
 /**
- * 删除项目（删除 Mongo 元数据 + 本地文件目录）
+ * 删除项目（删除 Mongo 元数据 + 对象存储文件）
  */
 export async function deleteProject(token: string): Promise<boolean> {
   const coll = await getCollection();
   const result = await coll.deleteOne({ token });
-  await fs.rm(getProjectDir(token), { recursive: true, force: true });
+  const keys = await listProjectStorageKeys(token);
+  await deleteProjectStorageFilesByKeys(keys);
+  await cleanupLegacyDir(token);
   return result.deletedCount > 0;
 }

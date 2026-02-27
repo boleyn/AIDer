@@ -1,7 +1,13 @@
 import path from "node:path";
 import { Readable } from "node:stream";
 
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type StorageBucketType = "public" | "private";
@@ -153,6 +159,66 @@ export const getObjectFromStorage = async ({
   };
 };
 
+export const listStorageObjectKeysByPrefix = async ({
+  prefix,
+  bucketType = "private",
+}: {
+  prefix: string;
+  bucketType?: StorageBucketType;
+}) => {
+  const client = getS3Client();
+  const normalizedPrefix = normalizeStorageKey(prefix).replace(/\/+$/, "") + "/";
+  const bucket = getBucketName(bucketType);
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: normalizedPrefix,
+        ContinuationToken: continuationToken,
+      })
+    );
+    const contents = response.Contents || [];
+    for (const item of contents) {
+      if (item.Key) {
+        keys.push(item.Key);
+      }
+    }
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return keys;
+};
+
+export const deleteStorageObjects = async ({
+  keys,
+  bucketType = "private",
+}: {
+  keys: string[];
+  bucketType?: StorageBucketType;
+}) => {
+  if (keys.length === 0) return;
+
+  const client = getS3Client();
+  const bucket = getBucketName(bucketType);
+  const normalizedKeys = keys.map((key) => normalizeStorageKey(key));
+
+  for (let i = 0; i < normalizedKeys.length; i += 1000) {
+    const batch = normalizedKeys.slice(i, i + 1000);
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: {
+          Objects: batch.map((key) => ({ Key: key })),
+          Quiet: true,
+        },
+      })
+    );
+  }
+};
+
 export const buildChatFileViewUrl = ({
   storagePath,
   download,
@@ -215,5 +281,34 @@ export const createPutObjectPresignedUrl = async ({
     headers: {
       ...(contentType ? { "Content-Type": contentType } : {}),
     },
+  };
+};
+
+export const createGetObjectPresignedUrl = async ({
+  key,
+  expiresIn = 1800,
+  bucketType = "private",
+}: {
+  key: string;
+  expiresIn?: number;
+  bucketType?: StorageBucketType;
+}) => {
+  const client = getS3Client();
+  const storageKey = normalizeStorageKey(key);
+  const bucket = getBucketName(bucketType);
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: storageKey,
+  });
+
+  const url = await getSignedUrl(client, command, {
+    expiresIn,
+  });
+
+  return {
+    url,
+    bucket,
+    key: storageKey,
+    method: "GET" as const,
   };
 };

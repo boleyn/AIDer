@@ -1,5 +1,10 @@
+import { createGetObjectPresignedUrl } from "@server/storage/s3";
+
 export const getS3ChatSource = () => ({
-  createGetChatFileURL: async ({ key }: { key: string; external?: boolean }) => ({
-    url: `/api/core/chat/files/view?storagePath=${encodeURIComponent(key)}`
-  })
+  createGetChatFileURL: async ({
+    key,
+  }: {
+    key: string;
+    external?: boolean;
+  }) => createGetObjectPresignedUrl({ key, bucketType: "private" }),
 });

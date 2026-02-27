@@ -53,7 +53,7 @@ const ChatHeader = ({
           {title || "Code Assistant"}
         </Text>
         <Text color="myGray.500" fontSize="xs" mt={0.5}>
-          会话数 {conversations.length}
+          对话数 {conversations.length}
         </Text>
       </Box>
 

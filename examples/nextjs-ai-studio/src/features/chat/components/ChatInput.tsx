@@ -13,7 +13,14 @@ import { useTranslation } from "next-i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatInputFile, ChatInputProps, ChatInputSubmitPayload } from "../types/chatInput";
+import type { UploadedFileArtifact } from "../types/fileArtifact";
 import ModelCascader from "./ModelCascader";
+
+type LocalInputFile = ChatInputFile & {
+  uploadState: "uploading" | "ready" | "error";
+  uploadedArtifact?: UploadedFileArtifact;
+  uploadError?: string;
+};
 
 const ChatInput = ({
   isSending,
@@ -21,21 +28,35 @@ const ChatInput = ({
   modelOptions,
   modelLoading,
   onChangeModel,
+  onUploadFiles,
   onSend,
   onStop,
 }: ChatInputProps) => {
   const { t } = useTranslation();
   const [text, setText] = useState("");
-  const [files, setFiles] = useState<ChatInputFile[]>([]);
+  const [files, setFiles] = useState<LocalInputFile[]>([]);
   const [isComposing, setIsComposing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isInputLocked = isSending || isSubmitting;
+  const hasUploadingFiles = useMemo(
+    () => files.some((item) => item.uploadState === "uploading"),
+    [files]
+  );
+  const hasUploadErrors = useMemo(
+    () => files.some((item) => item.uploadState === "error"),
+    [files]
+  );
 
   const canSend = useMemo(
-    () => !isSending && !isSubmitting && (text.trim().length > 0 || files.length > 0),
-    [files.length, isSending, isSubmitting, text]
+    () =>
+      !isSending &&
+      !isSubmitting &&
+      !hasUploadingFiles &&
+      !hasUploadErrors &&
+      (text.trim().length > 0 || files.length > 0),
+    [files.length, hasUploadErrors, hasUploadingFiles, isSending, isSubmitting, text]
   );
   const previewFiles = useMemo(
     () =>
@@ -60,20 +81,100 @@ const ChatInput = ({
     };
   }, [previewFiles]);
 
-  const onPickFiles = useCallback((picked: FileList | null) => {
-    if (!picked || picked.length === 0) return;
-    const next = Array.from(picked).map((file) => ({
-      id: createId(),
-      file,
-    }));
-    setFiles((prev) => [...prev, ...next]);
-  }, []);
+  const uploadSingleFile = useCallback(
+    async (fileItem: LocalInputFile) => {
+      try {
+        const uploaded = await onUploadFiles([
+          {
+            id: fileItem.id,
+            file: fileItem.file,
+          },
+        ]);
+        const matched = uploaded.find((artifact) => artifact.id === fileItem.id) || uploaded[0];
+
+        setFiles((prev) =>
+          prev.map((item) =>
+            item.id === fileItem.id
+              ? matched
+                ? {
+                    ...item,
+                    uploadState: "ready",
+                    uploadedArtifact: matched,
+                    uploadError: undefined,
+                  }
+                : {
+                    ...item,
+                    uploadState: "error",
+                    uploadError: "上传失败，请重试",
+                  }
+              : item
+          )
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "上传失败，请重试";
+        setFiles((prev) =>
+          prev.map((item) =>
+            item.id === fileItem.id
+              ? {
+                  ...item,
+                  uploadState: "error",
+                  uploadError: message,
+                }
+              : item
+          )
+        );
+      }
+    },
+    [onUploadFiles]
+  );
+
+  const retryUploadFile = useCallback(
+    (fileItem: LocalInputFile) => {
+      setFiles((prev) =>
+        prev.map((item) =>
+          item.id === fileItem.id
+            ? {
+                ...item,
+                uploadState: "uploading",
+                uploadError: undefined,
+                uploadedArtifact: undefined,
+              }
+            : item
+        )
+      );
+      void uploadSingleFile(fileItem);
+    },
+    [uploadSingleFile]
+  );
+
+  const onPickFiles = useCallback(
+    async (picked: FileList | null) => {
+      if (!picked || picked.length === 0) return;
+      const next = Array.from(picked).map((file) => ({
+        id: createId(),
+        file,
+        uploadState: "uploading" as const,
+      }));
+      setFiles((prev) => [...prev, ...next]);
+      await Promise.allSettled(next.map((fileItem) => uploadSingleFile(fileItem)));
+    },
+    [uploadSingleFile]
+  );
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
+    const selectedFiles: ChatInputFile[] = files.map((item) => ({
+      id: item.id,
+      file: item.file,
+    }));
+    const uploadedFiles = files
+      .map((item) => item.uploadedArtifact)
+      .filter((item): item is UploadedFileArtifact => Boolean(item));
+
     const payload: ChatInputSubmitPayload = {
       text: text.trim(),
-      files,
+      files: selectedFiles,
+      uploadedFiles,
     };
 
     setIsSubmitting(true);
@@ -134,6 +235,26 @@ const ChatInput = ({
                     top="-8px"
                     zIndex={10}
                   />
+                  {item.uploadState === "error" ? (
+                    <Text
+                      as="button"
+                      bg="rgba(255,255,255,0.95)"
+                      border="1px solid"
+                      borderColor="red.200"
+                      borderRadius="999px"
+                      color="red.500"
+                      fontSize="10px"
+                      left="6px"
+                      lineHeight="16px"
+                      onClick={() => retryUploadFile(item)}
+                      px="6px"
+                      position="absolute"
+                      top="6px"
+                      zIndex={12}
+                    >
+                      重试
+                    </Text>
+                  ) : null}
                   {item.isImage ? (
                     <Box
                       alt={item.file.name}
@@ -147,9 +268,22 @@ const ChatInput = ({
                   ) : (
                     <Flex align="center" gap={2} h="100%" pr={2}>
                       <Box as="img" h="24px" src={`/icons/chat/${item.icon}.svg`} w="24px" />
-                      <Text className="textEllipsis" fontSize="xs" noOfLines={1}>
-                        {item.file.name}
-                      </Text>
+                      <Box minW={0}>
+                        <Text className="textEllipsis" fontSize="xs" noOfLines={1}>
+                          {item.file.name}
+                        </Text>
+                        <Text
+                          color={item.uploadState === "error" ? "red.500" : "gray.500"}
+                          fontSize="10px"
+                          noOfLines={1}
+                        >
+                          {item.uploadState === "uploading"
+                            ? "上传中..."
+                            : item.uploadState === "error"
+                            ? item.uploadError || "上传失败，可重试"
+                            : "已上传"}
+                        </Text>
+                      </Box>
                     </Flex>
                   )}
                 </Box>
@@ -219,6 +353,14 @@ const ChatInput = ({
             {isSending ? (
               <Text color="myGray.500" fontSize="xs">
                 {t("chat:generating", { defaultValue: "正在生成回复..." })}
+              </Text>
+            ) : hasUploadingFiles ? (
+              <Text color="myGray.500" fontSize="xs">
+                {t("chat:uploading_files", { defaultValue: "文件上传中..." })}
+              </Text>
+            ) : hasUploadErrors ? (
+              <Text color="red.500" fontSize="xs">
+                {t("chat:upload_failed", { defaultValue: "存在上传失败文件，请移除后重试" })}
               </Text>
             ) : null}
           </Flex>
