@@ -9,9 +9,7 @@ import {
   RefreshIcon,
   RunIcon,
   SaveIcon,
-  SettingsIcon,
   ShareIcon,
-  SplitViewIcon,
 } from "../common/Icon";
 
 type TopBarActionsProps = {
@@ -129,22 +127,6 @@ const TopBarActions = ({
           variant="ghost"
           icon={<ShareIcon />}
           onClick={handleShare}
-        />
-      </MyTooltip>
-      <MyTooltip label="分屏视图">
-        <IconButton
-          aria-label="分屏视图"
-          size="sm"
-          variant="ghost"
-          icon={<SplitViewIcon />}
-        />
-      </MyTooltip>
-      <MyTooltip label="设置">
-        <IconButton
-          aria-label="设置"
-          size="sm"
-          variant="ghost"
-          icon={<SettingsIcon />}
         />
       </MyTooltip>
       <MyTooltip label={getSaveTooltipLabel()}>
