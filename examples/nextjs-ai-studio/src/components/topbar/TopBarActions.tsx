@@ -42,12 +42,6 @@ const TopBarActions = ({
     onDownload?.();
   };
 
-  const handleShare = () => {
-    // 分享项目（复制链接）
-    handleCopy();
-    onShare?.();
-  };
-
   const handleRefresh = () => {
     // 刷新预览
     window.location.reload();
@@ -126,7 +120,7 @@ const TopBarActions = ({
           size="sm"
           variant="ghost"
           icon={<ShareIcon />}
-          onClick={handleShare}
+          onClick={onShare}
         />
       </MyTooltip>
       <MyTooltip label={getSaveTooltipLabel()}>

@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Flex } from "@chakra-ui/react";
+import {
+  Box,
+  Button,
+  Flex,
+  Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalHeader,
+  ModalOverlay,
+  Text,
+  useToast,
+} from "@chakra-ui/react";
 import { SandpackProvider, type SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
 import dynamic from "next/dynamic";
 import { githubLight } from "@codesandbox/sandpack-themes";
@@ -32,6 +45,7 @@ type StudioShellProps = {
 };
 
 type ActiveView = "preview" | "code";
+type ShareMode = "editable" | "preview";
 
 const DEFAULT_TEMPLATE: SandpackPredefinedTemplate = "react";
 
@@ -94,6 +108,7 @@ const normalizeFiles = (rawFiles: unknown): SandpackFiles | null => {
 };
 
 const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) => {
+  const toast = useToast();
   const [token, setToken] = useState(initialToken);
   const [status, setStatus] = useState<ProjectStatus>(() => {
     if (initialProject && initialProject.token === initialToken) {
@@ -115,6 +130,12 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
   const [activeView, setActiveView] = useState<ActiveView>("code");
   const [projectName, setProjectName] = useState<string>(initialProject?.name || "");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareLinks, setShareLinks] = useState<Record<ShareMode, string>>({
+    editable: "",
+    preview: "",
+  });
 
   const loadProject = useCallback(async (requestedToken: string) => {
     if (!requestedToken) {
@@ -252,6 +273,99 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
     }
   }, [token, projectName]);
 
+  const createShareLink = useCallback(async (mode: ShareMode): Promise<string> => {
+    if (!token) {
+      throw new Error("缺少项目 token");
+    }
+
+    const response = await fetch("/api/share", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...withAuthHeaders(),
+      },
+      body: JSON.stringify({ token, mode }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error || `创建分享失败: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { url: string };
+    if (!payload.url) {
+      throw new Error("服务未返回分享链接");
+    }
+    return payload.url;
+  }, [token]);
+
+  const handleOpenShareModal = useCallback(async () => {
+    if (!token) {
+      toast({
+        title: "当前项目无法分享",
+        description: "缺少项目 token",
+        status: "error",
+        duration: 2500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setIsShareModalOpen(true);
+    setShareLoading(true);
+    try {
+      const [editable, preview] = await Promise.all([
+        createShareLink("editable"),
+        createShareLink("preview"),
+      ]);
+      setShareLinks({ editable, preview });
+    } catch (error) {
+      toast({
+        title: "生成分享链接失败",
+        description: error instanceof Error ? error.message : "未知错误",
+        status: "error",
+        duration: 2800,
+        isClosable: true,
+      });
+    } finally {
+      setShareLoading(false);
+    }
+  }, [createShareLink, token, toast]);
+
+  const handleCopyShareLink = useCallback((mode: ShareMode, inputId: string) => {
+    const link = shareLinks[mode];
+    if (!link) return;
+
+    const copy = async () => {
+      if (!navigator.clipboard || !window.isSecureContext) {
+        throw new Error("clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(link);
+    };
+
+    copy()
+      .then(() => {
+        toast({
+          title: "链接已复制",
+          status: "success",
+          duration: 1500,
+          isClosable: true,
+        });
+      })
+      .catch(() => {
+        const input = document.getElementById(inputId) as HTMLInputElement | null;
+        input?.focus();
+        input?.select();
+        toast({
+          title: "当前环境不支持自动复制",
+          description: "已选中链接，请手动复制",
+          status: "info",
+          duration: 3000,
+          isClosable: true,
+        });
+      });
+  }, [shareLinks, toast]);
+
   const handleFilesChange = useCallback((nextFiles: SandpackFiles) => {
     latestFilesRef.current = nextFiles;
   }, []);
@@ -375,6 +489,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
             saveStatus={saveStatus}
             onSave={handleManualSave}
             onDownload={handleDownload}
+            onShare={handleOpenShareModal}
             onProjectNameChange={handleProjectNameChange}
           />
         </Box>
@@ -444,6 +559,61 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
           </Flex>
         </SandpackProvider>
       </Flex>
+
+      <Modal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>项目分享</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={4}>
+            <Text color="myGray.600" fontSize="sm" mb={3}>
+              当前为开发环境（非 HTTPS）时可能无法自动复制，可直接手动复制下方链接。
+            </Text>
+
+            <Box border="1px solid" borderColor="myGray.200" borderRadius="md" p={3} mb={3}>
+              <Text fontWeight="700" fontSize="sm" mb={1}>可编辑分享（需登录）</Text>
+              <Text color="myGray.500" fontSize="xs" mb={2}>接收方登录后自动创建项目副本，不影响原项目。</Text>
+              <Flex gap={2}>
+                <Input
+                  id="share-link-editable"
+                  readOnly
+                  value={shareLinks.editable}
+                  isDisabled={shareLoading || !shareLinks.editable}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+                <Button
+                  minW="84px"
+                  onClick={() => handleCopyShareLink("editable", "share-link-editable")}
+                  isDisabled={shareLoading || !shareLinks.editable}
+                >
+                  复制
+                </Button>
+              </Flex>
+            </Box>
+
+            <Box border="1px solid" borderColor="myGray.200" borderRadius="md" p={3}>
+              <Text fontWeight="700" fontSize="sm" mb={1}>预览分享（免登录）</Text>
+              <Text color="myGray.500" fontSize="xs" mb={2}>接收方可直接访问并查看实时预览。</Text>
+              <Flex gap={2}>
+                <Input
+                  id="share-link-preview"
+                  readOnly
+                  value={shareLinks.preview}
+                  isDisabled={shareLoading || !shareLinks.preview}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+                <Button
+                  minW="84px"
+                  onClick={() => handleCopyShareLink("preview", "share-link-preview")}
+                  isDisabled={shareLoading || !shareLinks.preview}
+                >
+                  复制
+                </Button>
+              </Flex>
+            </Box>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 };

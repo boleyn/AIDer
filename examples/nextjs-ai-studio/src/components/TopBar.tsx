@@ -5,7 +5,7 @@ import { useRouter } from "next/router";
 import TopBarActions from "./topbar/TopBarActions";
 import MyTooltip from "./ui/MyTooltip";
 import type { SaveStatus } from "./CodeChangeListener";
-import { BackIcon, CheckIcon, CloseIcon, EditIcon, SaveIcon } from "./common/Icon";
+import { BackIcon, CheckIcon, CloseIcon, EditIcon } from "./common/Icon";
 
 type TopBarProps = {
   projectName?: string;

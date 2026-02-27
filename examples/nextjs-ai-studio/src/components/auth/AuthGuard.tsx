@@ -3,7 +3,12 @@ import { useRouter } from "next/router";
 import { Flex, Spinner } from "@chakra-ui/react";
 import { clearAuthToken, getAuthToken, withAuthHeaders } from "@features/auth/client/authClient";
 
-const PUBLIC_ROUTES = new Set<string>(["/login", "/auth/feishu/login", "/auth/feishu/callback"]);
+const PUBLIC_ROUTES = new Set<string>([
+  "/login",
+  "/auth/feishu/login",
+  "/auth/feishu/callback",
+  "/share/preview/[shareId]",
+]);
 
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
