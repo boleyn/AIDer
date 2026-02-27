@@ -1,5 +1,6 @@
 import { Box, Flex, Spinner, Text } from "@chakra-ui/react";
 import { withAuthHeaders } from "@features/auth/client/authClient";
+import { extractText } from "@shared/chat/messages";
 import { createId } from "@shared/chat/messages";
 import { streamFetch, SseResponseEventEnum } from "@shared/network/streamFetch";
 import { useRouter } from "next/router";
@@ -14,6 +15,7 @@ import {
   parseChatFiles,
   uploadChatFiles,
 } from "../services/files";
+import { updateMessageFeedback } from "../services/feedback";
 import { getChatModels } from "../services/models";
 import type { ChatModelCatalog } from "../services/models";
 import type { ChatInputFile, ChatInputSubmitPayload } from "../types/chatInput";
@@ -23,7 +25,8 @@ import { type FlowNodeResponsePayload } from "../utils/flowNodeMessages";
 
 import ChatHeader from "./ChatHeader";
 import ChatInput from "./ChatInput";
-import ChatItem from "./ChatItem";
+import ChatMessageBlock from "./message/ChatMessageBlock";
+import type { MessageRating } from "./message/MessageActionBar";
 import ExecutionSummaryRow from "./ExecutionSummaryRow";
 
 import type { ConversationMessage } from "@/types/conversation";
@@ -65,6 +68,12 @@ interface ReasoningStreamPayload {
 interface WorkflowDurationPayload {
   durationSeconds?: number;
 }
+
+const getMessageFeedback = (message: ConversationMessage): MessageRating | undefined => {
+  if (!message.additional_kwargs || typeof message.additional_kwargs !== "object") return undefined;
+  const value = (message.additional_kwargs as { userFeedback?: unknown }).userFeedback;
+  return value === "up" || value === "down" ? value : undefined;
+};
 
 const buildConversationTitle = (value: string): string | null => {
   const trimmed = value.trim();
@@ -252,6 +261,9 @@ const ChatPanel = ({
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [messageRatings, setMessageRatings] = useState<Record<string, MessageRating | undefined>>(
+    {}
+  );
   const [modelLoading, setModelLoading] = useState(false);
   const [channel, setChannel] = useState("aiproxy");
   const [model, setModel] = useState("agent");
@@ -324,7 +336,19 @@ const ChatPanel = ({
   );
 
   useEffect(() => {
-    setMessages(activeConversation?.messages ?? []);
+    const nextMessages = activeConversation?.messages ?? [];
+    setMessages(nextMessages);
+    setMessageRatings(() => {
+      const next: Record<string, MessageRating | undefined> = {};
+      for (const message of nextMessages) {
+        if (!message.id) continue;
+        const feedback = getMessageFeedback(message);
+        if (feedback) {
+          next[message.id] = feedback;
+        }
+      }
+      return next;
+    });
   }, [activeConversation?.id, activeConversation?.messages]);
 
   useEffect(() => {
@@ -442,9 +466,15 @@ const ChatPanel = ({
   );
 
   const handleSend = useCallback(
-    async (payload: ChatInputSubmitPayload) => {
+    async (
+      payload: ChatInputSubmitPayload,
+      options?: {
+        echoUserMessage?: boolean;
+      }
+    ) => {
       const text = payload.text.trim();
       if ((text.length === 0 && payload.files.length === 0) || isSending) return;
+      const echoUserMessage = options?.echoUserMessage ?? true;
 
       const conversation = await ensureConversation();
       const conversationId = conversation?.id ?? activeConversation?.id;
@@ -456,20 +486,22 @@ const ChatPanel = ({
       const fallbackArtifacts = toFileArtifacts(payload.files);
       const finalArtifacts =
         payload.uploadedFiles.length > 0 ? payload.uploadedFiles : fallbackArtifacts;
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "user",
-          content: displayText,
-          id: userMessageId,
-          artifact:
-            payload.files.length > 0
-              ? {
-                  files: finalArtifacts,
-                }
-              : undefined,
-        },
-      ]);
+      if (echoUserMessage) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "user",
+            content: displayText,
+            id: userMessageId,
+            artifact:
+              payload.files.length > 0
+                ? {
+                    files: finalArtifacts,
+                  }
+                : undefined,
+          },
+        ]);
+      }
 
       const filePrompt =
         payload.uploadedFiles.length > 0
@@ -477,7 +509,7 @@ const ChatPanel = ({
           : await buildFilePrompt(payload.files);
       const imageInputParts = await getImageInputParts(finalArtifacts);
 
-      if (conversationId && nextConversationTitle) {
+      if (echoUserMessage && conversationId && nextConversationTitle) {
         updateConversationTitle(conversationId, nextConversationTitle);
       }
 
@@ -498,12 +530,14 @@ const ChatPanel = ({
           : undefined,
       };
 
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id !== userMessageId) return msg;
-          return userMessage;
-        })
-      );
+      if (echoUserMessage) {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id !== userMessageId) return msg;
+            return userMessage;
+          })
+        );
+      }
       setIsSending(true);
 
       const requestMessage: ConversationMessage = {
@@ -766,6 +800,111 @@ const ChatPanel = ({
       });
   }, [token]);
 
+  const handleRateMessage = useCallback(
+    async (messageId: string, nextRating: MessageRating) => {
+      const conversationId = activeConversation?.id;
+      if (!conversationId) return;
+
+      let previous: MessageRating | undefined;
+      let resolved: MessageRating | undefined;
+
+      setMessageRatings((prev) => {
+        previous = prev[messageId];
+        resolved = previous === nextRating ? undefined : nextRating;
+        return {
+          ...prev,
+          [messageId]: resolved,
+        };
+      });
+
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (message.id !== messageId) return message;
+          const kwargs =
+            message.additional_kwargs && typeof message.additional_kwargs === "object"
+              ? message.additional_kwargs
+              : {};
+          return {
+            ...message,
+            additional_kwargs: {
+              ...kwargs,
+              userFeedback: resolved,
+            },
+          };
+        })
+      );
+
+      try {
+        await updateMessageFeedback({
+          token,
+          conversationId,
+          messageId,
+          feedback: resolved,
+        });
+      } catch {
+        setMessageRatings((prev) => ({
+          ...prev,
+          [messageId]: previous,
+        }));
+        setMessages((prev) =>
+          prev.map((message) => {
+            if (message.id !== messageId) return message;
+            const kwargs =
+              message.additional_kwargs && typeof message.additional_kwargs === "object"
+                ? message.additional_kwargs
+                : {};
+            return {
+              ...message,
+              additional_kwargs: {
+                ...kwargs,
+                userFeedback: previous,
+              },
+            };
+          })
+        );
+      }
+    },
+    [activeConversation?.id, token]
+  );
+
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    setMessages((prev) => prev.filter((message) => message.id !== messageId));
+  }, []);
+
+  const handleRegenerateMessage = useCallback(
+    async (assistantMessageId: string) => {
+      if (isSending) return;
+      const snapshot = [...messages];
+      const assistantIndex = snapshot.findIndex((message) => message.id === assistantMessageId);
+      if (assistantIndex < 0) return;
+
+      const previousUserMessage = [...snapshot.slice(0, assistantIndex)]
+        .reverse()
+        .find((message) => message.role === "user");
+      if (!previousUserMessage) return;
+
+      const text = extractText(previousUserMessage.content).trim();
+      if (!text) return;
+
+      setMessages((prev) => prev.slice(0, assistantIndex));
+      setMessageRatings((prev) => {
+        const next = { ...prev };
+        for (const message of snapshot.slice(assistantIndex)) {
+          if (!message.id) continue;
+          delete next[message.id];
+        }
+        return next;
+      });
+
+      await handleSend({
+        text,
+        files: [],
+        uploadedFiles: [],
+      }, { echoUserMessage: false });
+    },
+    [handleSend, isSending, messages]
+  );
+
   const activeConversationTitle = useMemo(() => activeConversation?.title, [activeConversation?.title]);
 
   return (
@@ -825,23 +964,30 @@ const ChatPanel = ({
             <Flex direction="column" gap={3}>
               {messages.map((message, index) => {
                 const messageId = message.id ?? `${message.role}-${index}`;
+                const summary = getExecutionSummary(message);
+                const canRegenerate =
+                  message.role === "assistant" &&
+                  messages.slice(0, index).some((item) => item.role === "user");
                 return (
                   <Box key={messageId}>
-                    <ChatItem
+                    <ChatMessageBlock
                       isStreaming={message.id === streamingMessageId}
                       message={message}
                       messageId={messageId}
+                      canRegenerate={canRegenerate}
+                      onDelete={() => handleDeleteMessage(messageId)}
+                      onRate={(rating) => handleRateMessage(messageId, rating)}
+                      onRegenerate={() => {
+                        void handleRegenerateMessage(messageId);
+                      }}
+                      rating={messageRatings[messageId]}
                     />
-                    {(() => {
-                      const summary = getExecutionSummary(message);
-                      if (!summary) return null;
-                      return (
-                        <ExecutionSummaryRow
-                          durationSeconds={summary.durationSeconds}
-                          nodeCount={summary.nodeCount}
-                        />
-                      );
-                    })()}
+                    {summary ? (
+                      <ExecutionSummaryRow
+                        durationSeconds={summary.durationSeconds}
+                        nodeCount={summary.nodeCount}
+                      />
+                    ) : null}
                   </Box>
                 );
               })}

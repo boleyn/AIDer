@@ -528,3 +528,49 @@ export async function deleteAllConversations(token: string): Promise<number> {
 
   return result.modifiedCount ?? 0;
 }
+
+export async function updateConversationMessageFeedback({
+  token,
+  chatId,
+  messageId,
+  feedback,
+}: {
+  token: string;
+  chatId: string;
+  messageId: string;
+  feedback?: "up" | "down";
+}): Promise<boolean> {
+  const meta = await getMetaByChatId(token, chatId);
+  if (!meta?.chatId) return false;
+
+  const itemCol = await getItemCollection();
+  const result = await itemCol.updateOne(
+    { token, chatId, dataId: messageId, role: "assistant" },
+    feedback
+      ? {
+          $set: {
+            "additional_kwargs.userFeedback": feedback,
+          },
+        }
+      : {
+          $unset: {
+            "additional_kwargs.userFeedback": "",
+          },
+        }
+  );
+
+  if ((result.modifiedCount ?? 0) > 0) {
+    const metaCol = await getMetaCollection();
+    await metaCol.updateOne(
+      { token, chatId },
+      {
+        $set: {
+          updateTime: new Date(),
+        },
+      }
+    );
+    return true;
+  }
+
+  return false;
+}
