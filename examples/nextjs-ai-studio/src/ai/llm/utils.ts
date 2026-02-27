@@ -172,8 +172,7 @@ export const loadRequestMessages = async ({
                       try {
                         return (
                           await getS3ChatSource().createGetChatFileURL({
-                            key: item.key,
-                            external: false
+                            key: item.key
                           })
                         ).url;
                       } catch (error) {}

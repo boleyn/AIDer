@@ -5,6 +5,5 @@ export const getS3ChatSource = () => ({
     key,
   }: {
     key: string;
-    external?: boolean;
   }) => createGetObjectPresignedUrl({ key, bucketType: "private" }),
 });

@@ -1,12 +1,3 @@
-type PresignChatFileGetUrlParams = {
-  key: string;
-  appId?: string;
-  outLinkAuthData?: unknown;
-};
-
-export const getPresignedChatFileGetUrl = async (
-  params: PresignChatFileGetUrlParams
-): Promise<string> => {
+export const getPresignedChatFileGetUrl = async (params: { key: string }): Promise<string> => {
   return `/api/core/chat/files/view?storagePath=${encodeURIComponent(params.key)}`;
 };
-

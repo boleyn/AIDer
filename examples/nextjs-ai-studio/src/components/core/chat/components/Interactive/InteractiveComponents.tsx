@@ -13,8 +13,6 @@ import { nodeInputTypeToInputType } from '@/components/core/app/formRender/utils
 import FormLabel from '@/components/common/MyBox/FormLabel';
 import LeftRadio from '@/components/common/Radio/LeftRadio';
 import { getPresignedChatFileGetUrl } from '@/shared/api/chatFile';
-import { useContextSelector } from 'use-context-selector';
-import { WorkflowRuntimeContext } from '@/components/core/chat/ChatContainer/context/workflowRuntimeContext';
 import { useTranslation } from 'next-i18next';
 
 const DescriptionBox = React.memo(function DescriptionBox({
@@ -139,8 +137,6 @@ export const FormInputComponent = React.memo(function FormInputComponent({
     defaultValues
   });
 
-  const appId = useContextSelector(WorkflowRuntimeContext, (v) => v.appId);
-  const outLinkAuthData = useContextSelector(WorkflowRuntimeContext, (v) => v.outLinkAuthData);
   const formValues = watch();
 
   // 刷新文件 URL（处理 TTL 过期）
@@ -158,9 +154,7 @@ export const FormInputComponent = React.memo(function FormInputComponent({
                   if (file.key) {
                     try {
                       const newUrl = await getPresignedChatFileGetUrl({
-                        key: file.key,
-                        appId,
-                        outLinkAuthData
+                        key: file.key
                       });
                       return {
                         ...file,
@@ -180,7 +174,7 @@ export const FormInputComponent = React.memo(function FormInputComponent({
     };
 
     refreshFileUrls();
-  }, [submitted, inputForm, defaultValues, appId, outLinkAuthData, setValue]);
+  }, [submitted, inputForm, defaultValues, setValue]);
 
   const isFileUploading = React.useMemo(() => {
     return inputForm.some((input) => {
