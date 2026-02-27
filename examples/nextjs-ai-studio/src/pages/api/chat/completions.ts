@@ -264,6 +264,7 @@ const PROJECT_LOCAL_TOOL_NAMES = new Set([
   "write_file",
   "replace_in_file",
   "search_in_files",
+  "compile_project",
   "global",
 ]);
 
@@ -308,7 +309,15 @@ const detectUserIntent = (messages: ConversationMessage[]): UserIntent => {
 const routeToolsByIntent = (allTools: AgentToolDefinition[], intent: UserIntent): ToolRouteResult => {
   if (intent === "tooling") {
     const toolBuildTools = allTools.filter((tool) =>
-      ["list_files", "search_in_files", "read_file", "replace_in_file", "write_file", "global"].includes(tool.name)
+      [
+        "list_files",
+        "search_in_files",
+        "read_file",
+        "replace_in_file",
+        "write_file",
+        "compile_project",
+        "global",
+      ].includes(tool.name)
     );
 
     if (toolBuildTools.length > 0) {

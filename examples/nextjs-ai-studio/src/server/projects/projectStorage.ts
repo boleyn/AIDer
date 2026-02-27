@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import { ObjectId } from "mongodb";
+import type { SandpackCompileInfo } from "@shared/sandpack/compileInfo";
 import { getMongoDb } from "../db/mongo";
 import {
   deleteStorageObjects,
@@ -20,6 +21,7 @@ export type ProjectMeta = {
   template: string;
   userId: string;
   dependencies?: Record<string, string>;
+  sandpackCompileInfo?: SandpackCompileInfo;
   createdAt: string;
   updatedAt: string;
 };
@@ -31,6 +33,7 @@ export type ProjectData = {
   userId: string;
   files: Record<string, ProjectFile>;
   dependencies?: Record<string, string>;
+  sandpackCompileInfo?: SandpackCompileInfo;
   createdAt: string;
   updatedAt: string;
 };
@@ -48,6 +51,7 @@ type ProjectDoc = {
   template: string;
   userId: string;
   dependencies?: Record<string, string>;
+  sandpackCompileInfo?: SandpackCompileInfo;
   filesPath?: string;
   files?: Record<string, ProjectFile>;
   createdAt: string;
@@ -361,6 +365,7 @@ async function docToProject(doc: ProjectDoc, coll: Awaited<ReturnType<typeof get
     userId: doc.userId,
     files,
     dependencies: doc.dependencies ?? {},
+    sandpackCompileInfo: doc.sandpackCompileInfo,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -395,7 +400,7 @@ export async function hasProjectFilesDir(token: string): Promise<boolean> {
  */
 export async function updateProjectMeta(
   token: string,
-  updates: Partial<Pick<ProjectMeta, "name" | "template" | "dependencies">>
+  updates: Partial<Pick<ProjectMeta, "name" | "template" | "dependencies" | "sandpackCompileInfo">>
 ): Promise<void> {
   const coll = await getCollection();
   const exists = await coll.findOne({ token }, { projection: { _id: 1 } });
@@ -408,6 +413,7 @@ export async function updateProjectMeta(
   if (updates.name !== undefined) set.name = updates.name;
   if (updates.template !== undefined) set.template = updates.template;
   if (updates.dependencies !== undefined) set.dependencies = updates.dependencies;
+  if (updates.sandpackCompileInfo !== undefined) set.sandpackCompileInfo = updates.sandpackCompileInfo;
 
   const result = await coll.updateOne({ token }, { $set: set });
   if (result.matchedCount === 0) throw new Error("项目不存在");
@@ -469,6 +475,7 @@ export async function saveProject(project: ProjectData): Promise<void> {
     template: project.template,
     userId: project.userId,
     dependencies: project.dependencies ?? {},
+    sandpackCompileInfo: project.sandpackCompileInfo,
     filesPath: getFilesMetaPath(project.token),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,

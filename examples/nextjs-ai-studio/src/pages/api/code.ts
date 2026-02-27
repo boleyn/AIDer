@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { SandpackPredefinedTemplate } from "@codesandbox/sandpack-react";
+import type { SandpackCompileInfo } from "@shared/sandpack/compileInfo";
+import { normalizeSandpackCompileInfo } from "@shared/sandpack/compileInfo";
 import JSZip from "jszip";
 import {
   getProject,
@@ -13,6 +15,7 @@ type PatchProjectRequest = {
   name?: string;
   template?: SandpackPredefinedTemplate;
   dependencies?: Record<string, string>;
+  sandpackCompileInfo?: SandpackCompileInfo;
 };
 
 type UpdateFileRequest = {
@@ -25,6 +28,7 @@ type UpdateFilesRequest = {
   name?: string;
   template?: SandpackPredefinedTemplate;
   dependencies?: Record<string, string>;
+  compileInfo?: SandpackCompileInfo;
 };
 
 const hasNonEmptyFiles = (files: unknown): files is Record<string, { code: string }> => {
@@ -113,6 +117,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         template: project.template,
         files: project.files,
         dependencies: project.dependencies || {},
+        sandpackCompileInfo: project.sandpackCompileInfo || null,
         name: project.name,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
@@ -141,6 +146,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         name: body.name,
         template: body.template,
         dependencies: body.dependencies,
+        sandpackCompileInfo: body.sandpackCompileInfo,
       });
 
       const updatedProject = await getProject(token);
@@ -149,6 +155,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         name: updatedProject!.name,
         template: updatedProject!.template,
         dependencies: updatedProject!.dependencies,
+        sandpackCompileInfo: updatedProject!.sandpackCompileInfo,
         updatedAt: updatedProject!.updatedAt,
       });
     } catch (error) {
@@ -162,6 +169,33 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     // 更新文件（支持单文件或批量）
     const action = typeof req.query.action === "string" ? req.query.action : "files";
     const body = req.body as Partial<UpdateFileRequest & UpdateFilesRequest>;
+
+    if (action === "compile-info") {
+      try {
+        const project = await getProject(token);
+        if (!project) {
+          res.status(404).json({ error: "项目不存在" });
+          return;
+        }
+        if (project.userId && project.userId !== userId) {
+          res.status(403).json({ error: "无权访问该项目" });
+          return;
+        }
+
+        const compileInfo = normalizeSandpackCompileInfo(body.compileInfo);
+        if (!compileInfo) {
+          res.status(400).json({ error: "compileInfo 参数无效" });
+          return;
+        }
+
+        await updateProjectMeta(token, { sandpackCompileInfo: compileInfo });
+        res.status(200).json({ success: true, sandpackCompileInfo: compileInfo });
+      } catch (error) {
+        console.error("Failed to update compile info:", error);
+        res.status(500).json({ error: "更新编译信息失败" });
+      }
+      return;
+    }
 
     // 优先识别单文件更新，避免误触发批量更新删除其它文件
     const isSingleFileUpdate = typeof body.path === "string" && typeof body.code === "string";

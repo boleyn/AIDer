@@ -2,12 +2,18 @@ import { z } from "zod";
 import type { ChangeTracker, GlobalToolInput } from "../globalTools";
 import { globalToolSchema, runGlobalAction } from "../globalTools";
 import type { AgentToolDefinition } from "./types";
+import { getProject } from "@server/projects/projectStorage";
 
 const listFilesSchema = z.object({});
 const readFileSchema = z.object({ path: z.string() });
 const writeFileSchema = z.object({ path: z.string(), content: z.string() });
 const replaceInFileSchema = z.object({ path: z.string(), query: z.string(), replace: z.string() });
 const searchInFilesSchema = z.object({ query: z.string(), limit: z.number().int().min(1).max(200).optional() });
+const sandpackCompileInfoSchema = z.object({
+  includeLogs: z.boolean().optional(),
+  includeEvents: z.boolean().optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
 
 const toJsonSchema = (schema: z.ZodTypeAny): Record<string, unknown> => {
   if (schema === listFilesSchema) return { type: "object", properties: {} };
@@ -47,6 +53,16 @@ const toJsonSchema = (schema: z.ZodTypeAny): Record<string, unknown> => {
         limit: { type: "integer", minimum: 1, maximum: 200, description: "最多返回条数" },
       },
       required: ["query"],
+    };
+  }
+  if (schema === sandpackCompileInfoSchema) {
+    return {
+      type: "object",
+      properties: {
+        includeLogs: { type: "boolean", description: "是否返回 console 日志，默认 true" },
+        includeEvents: { type: "boolean", description: "是否返回编译事件，默认 true" },
+        limit: { type: "integer", minimum: 1, maximum: 200, description: "日志与事件最大返回条数，默认 30" },
+      },
     };
   }
   return { type: "object" };
@@ -122,6 +138,46 @@ export function createProjectTools(token: string, changeTracker: ChangeTracker):
           { action: "search", query: parsed.data.query, limit: parsed.data.limit },
           changeTracker
         );
+      },
+    },
+    {
+      name: "compile_project",
+      description: "编译当前项目代码并返回错误。",
+      parameters: toJsonSchema(sandpackCompileInfoSchema),
+      run: async (input) => {
+        const parsed = safeParse<{
+          includeLogs?: boolean;
+          includeEvents?: boolean;
+          limit?: number;
+        }>(sandpackCompileInfoSchema, input);
+        if (!parsed.ok) throw new Error(parsed.error);
+
+        const project = await getProject(token);
+        if (!project) {
+          throw new Error("项目不存在");
+        }
+        const compileInfo = project.sandpackCompileInfo;
+        if (!compileInfo) {
+          return {
+            ok: false,
+            message: "暂无 Sandpack 编译信息。请先在编辑器/预览中触发一次运行后再试。",
+          };
+        }
+
+        const limit = parsed.data.limit ?? 30;
+        const includeLogs = parsed.data.includeLogs !== false;
+        const includeEvents = parsed.data.includeEvents !== false;
+
+        return {
+          ok: true,
+          status: compileInfo.status,
+          updatedAt: compileInfo.updatedAt,
+          lastEventType: compileInfo.lastEventType || "",
+          lastEventText: compileInfo.lastEventText || "",
+          errors: compileInfo.errors.slice(-limit),
+          events: includeEvents ? compileInfo.events.slice(-limit) : [],
+          logs: includeLogs ? compileInfo.logs.slice(-limit) : [],
+        };
       },
     },
     {

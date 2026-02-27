@@ -13,6 +13,7 @@ const ChatPanel = dynamic(() => import("../features/chat/components/ChatPanel"),
 import WorkspaceShell from "./WorkspaceShell";
 import type { SaveStatus } from "./CodeChangeListener";
 import CodeChangeListener from "./CodeChangeListener";
+import SandpackCompileListener from "./SandpackCompileListener";
 
 type SandpackFile = { code: string };
 export type SandpackFiles = Record<string, SandpackFile>;
@@ -394,6 +395,7 @@ const StudioShell = ({ initialToken = "", initialProject }: StudioShellProps) =>
             onSaveStatusChange={setSaveStatus}
             onFilesChange={handleFilesChange}
           />
+          <SandpackCompileListener token={token} />
           <Flex ref={mainRef} as="main" align="stretch" gap={0} flex="1" minH="0">
             <Box
               flex="0 0 auto"
