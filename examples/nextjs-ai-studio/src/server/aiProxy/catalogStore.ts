@@ -36,6 +36,7 @@ type ConfigModelItem = {
   maxResponse?: unknown;
   quoteMaxToken?: unknown;
   maxTemperature?: unknown;
+  reasoning?: unknown;
   defaultConfig?: unknown;
   fieldMap?: unknown;
 };
@@ -73,6 +74,16 @@ const toNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const toBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return undefined;
+};
+
 const parseModels = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [] as Array<{ id: string; label: string; profile?: Record<string, unknown> }>;
@@ -95,6 +106,7 @@ const parseModels = (value: unknown) => {
         maxResponse: toNumber(record.maxResponse),
         quoteMaxToken: toNumber(record.quoteMaxToken),
         maxTemperature: toNumber(record.maxTemperature),
+        reasoning: toBoolean(record.reasoning),
         defaultConfig:
           record.defaultConfig && typeof record.defaultConfig === "object" && !Array.isArray(record.defaultConfig)
             ? record.defaultConfig

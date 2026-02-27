@@ -50,6 +50,7 @@ export const getLLMModel = (input: string | LLMModelItemType): LLMModelItemType 
       typeof profile?.maxTemperature === 'number' && Number.isFinite(profile.maxTemperature)
         ? profile.maxTemperature
         : undefined,
+    reasoning: typeof profile?.reasoning === 'boolean' ? profile.reasoning : undefined,
     toolChoice: true,
     functionCall: true,
     defaultConfig:

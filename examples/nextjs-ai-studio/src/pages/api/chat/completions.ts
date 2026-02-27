@@ -38,6 +38,8 @@ const getToken = (req: NextApiRequest): string | null => {
 const sendSseEvent = (res: NextApiResponse, event: string, data: string) => {
   res.write(`event: ${event}\n`);
   res.write(`data: ${data}\n\n`);
+  const streamRes = res as NextApiResponse & { flush?: () => void };
+  streamRes.flush?.();
 };
 
 const startSse = (res: NextApiResponse) => {
@@ -45,6 +47,8 @@ const startSse = (res: NextApiResponse) => {
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  const streamRes = res as NextApiResponse & { flushHeaders?: () => void };
+  streamRes.flushHeaders?.();
 };
 
 const toIncomingMessages = (messages: unknown): IncomingMessage[] => {
@@ -426,7 +430,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const created = Math.floor(Date.now() / 1000);
   let streamStarted = false;
 
-  const emitAnswerChunk = (text: string, finishReason: string | null = null) => {
+  const emitAnswerChunk = (
+    text: string,
+    finishReason: string | null = null,
+    reasoningText?: string
+  ) => {
+    const delta: Record<string, string> = {};
+    if (text) {
+      delta.content = text;
+    }
+    if (reasoningText) {
+      delta.reasoning_content = reasoningText;
+    }
     sendSseEvent(
       res,
       SseResponseEventEnum.answer,
@@ -438,7 +453,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         choices: [
           {
             index: 0,
-            delta: text ? { content: text } : {},
+            delta,
             finish_reason: finishReason,
           },
         ],
@@ -756,6 +771,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (event === SseResponseEventEnum.reasoning) {
           const text = typeof data.text === "string" ? data.text : "";
           if (!text) return;
+          emitAnswerChunk("", null, text);
           emitReasoningChunk(text);
           return;
         }

@@ -265,6 +265,7 @@ const ChatPanel = ({
   const streamingTextRef = useRef("");
   const streamingReasoningRef = useRef("");
   const streamFlushFrameRef = useRef<number | null>(null);
+  const reasoningFlushFrameRef = useRef<number | null>(null);
 
   const flushAssistantReasoning = useCallback((assistantMessageId: string, reasoningText: string) => {
     setMessages((prev) =>
@@ -308,6 +309,18 @@ const ChatPanel = ({
       });
     },
     [flushAssistantText]
+  );
+
+  const scheduleAssistantReasoningFlush = useCallback(
+    (assistantMessageId: string) => {
+      if (reasoningFlushFrameRef.current !== null) return;
+
+      reasoningFlushFrameRef.current = window.requestAnimationFrame(() => {
+        reasoningFlushFrameRef.current = null;
+        flushAssistantReasoning(assistantMessageId, streamingReasoningRef.current);
+      });
+    },
+    [flushAssistantReasoning]
   );
 
   useEffect(() => {
@@ -382,6 +395,10 @@ const ChatPanel = ({
       if (streamFlushFrameRef.current !== null) {
         window.cancelAnimationFrame(streamFlushFrameRef.current);
         streamFlushFrameRef.current = null;
+      }
+      if (reasoningFlushFrameRef.current !== null) {
+        window.cancelAnimationFrame(reasoningFlushFrameRef.current);
+        reasoningFlushFrameRef.current = null;
       }
     };
   }, []);
@@ -504,6 +521,10 @@ const ChatPanel = ({
         window.cancelAnimationFrame(streamFlushFrameRef.current);
         streamFlushFrameRef.current = null;
       }
+      if (reasoningFlushFrameRef.current !== null) {
+        window.cancelAnimationFrame(reasoningFlushFrameRef.current);
+        reasoningFlushFrameRef.current = null;
+      }
       setStreamingMessageId(assistantMessageId);
       setMessages((prev) => [
         ...prev,
@@ -595,7 +616,7 @@ const ChatPanel = ({
               const reasoningPayload = item as ReasoningStreamPayload;
               if (!reasoningPayload.text) return;
               streamingReasoningRef.current = `${streamingReasoningRef.current}${reasoningPayload.text}`;
-              flushAssistantReasoning(assistantMessageId, streamingReasoningRef.current);
+              scheduleAssistantReasoningFlush(assistantMessageId);
               return;
             }
             if (item.event === SseResponseEventEnum.toolCall) {
@@ -684,8 +705,15 @@ const ChatPanel = ({
           window.cancelAnimationFrame(streamFlushFrameRef.current);
           streamFlushFrameRef.current = null;
         }
+        if (reasoningFlushFrameRef.current !== null) {
+          window.cancelAnimationFrame(reasoningFlushFrameRef.current);
+          reasoningFlushFrameRef.current = null;
+        }
         if (streamingTextRef.current) {
           flushAssistantText(assistantMessageId, streamingTextRef.current);
+        }
+        if (streamingReasoningRef.current) {
+          flushAssistantReasoning(assistantMessageId, streamingReasoningRef.current);
         }
         if (streamAbortRef.current === abortCtrl) {
           streamAbortRef.current = null;
@@ -704,6 +732,7 @@ const ChatPanel = ({
       onFilesUpdated,
       token,
       updateConversationTitle,
+      scheduleAssistantReasoningFlush,
     ]
   );
 

@@ -146,13 +146,17 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: Stream
 
           if (event === SseResponseEventEnum.answer) {
             const text = parseJson?.choices?.[0]?.delta?.content || "";
+            const reasoningText = parseJson?.choices?.[0]?.delta?.reasoning_content || "";
+            if (reasoningText) {
+              pushDataToQueue({ event: SseResponseEventEnum.reasoning, text: reasoningText });
+            }
             for (const ch of text) {
               pushDataToQueue({ event: SseResponseEventEnum.answer, text: ch });
             }
           } else if (event === SseResponseEventEnum.reasoning) {
             const text = typeof parseJson?.text === "string" ? parseJson.text : "";
-            for (const ch of text) {
-              pushDataToQueue({ event: SseResponseEventEnum.reasoning, text: ch });
+            if (text) {
+              pushDataToQueue({ event: SseResponseEventEnum.reasoning, text });
             }
           } else if (
             event === SseResponseEventEnum.toolCall ||
@@ -162,10 +166,10 @@ export const streamFetch = ({ url, data, onMessage, abortCtrl, headers }: Stream
             event === SseResponseEventEnum.workflowDuration
           ) {
             if (typeof parseJson === "object") {
-              pushDataToQueue({ event: event as any, ...parseJson });
+              onMessage({ event: event as any, ...parseJson });
             }
           } else if (event === SseResponseEventEnum.error) {
-            pushDataToQueue({ event: SseResponseEventEnum.error, ...parseJson });
+            onMessage({ event: SseResponseEventEnum.error, ...parseJson });
           }
         },
         onclose() {
