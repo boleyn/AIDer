@@ -1,4 +1,4 @@
-import { Badge, Button, Flex, IconButton, Text } from "@chakra-ui/react";
+import { Badge, Flex, IconButton, Text } from "@chakra-ui/react";
 import { CloseIcon } from "@components/common/Icon";
 
 type SkillsStudioTopBarProps = {
@@ -18,6 +18,19 @@ const statusText: Record<SkillsStudioTopBarProps["status"], string> = {
   ready: "工作区：已就绪",
   error: "工作区：加载失败",
 };
+
+const viewButtonStyle = (active: boolean) => ({
+  border: "1px solid",
+  borderColor: active ? "rgba(56, 124, 255, 0.45)" : "#e2e8f0",
+  background: active
+    ? "linear-gradient(135deg, rgba(51,112,255,0.14) 0%, rgba(14,165,233,0.12) 100%)"
+    : "rgba(255,255,255,0.92)",
+  color: active ? "#1d4ed8" : "#1f2937",
+  borderRadius: "999px",
+  padding: "6px 12px",
+  fontSize: "12px",
+  fontWeight: 700,
+});
 
 const SkillsStudioTopBar = ({
   activeView,
@@ -42,38 +55,12 @@ const SkillsStudioTopBar = ({
       gap={3}
     >
       <Flex align="center" gap={2} minW={0} flex="1">
-        <Button
-          h="36px"
-          px={3.5}
-          size="sm"
-          borderRadius="12px"
-          border="1px solid"
-          fontSize="12px"
-          fontWeight="700"
-          bg={activeView === "preview" ? "myGray.100" : "white"}
-          borderColor={activeView === "preview" ? "myGray.300" : "myGray.200"}
-          color={activeView === "preview" ? "myGray.900" : "myGray.700"}
-          _hover={{ bg: activeView === "preview" ? "myGray.100" : "myGray.50" }}
-          onClick={() => onChangeView("preview")}
-        >
+        <button style={viewButtonStyle(activeView === "preview")} type="button" onClick={() => onChangeView("preview")}>
           预览
-        </Button>
-        <Button
-          h="36px"
-          px={3.5}
-          size="sm"
-          borderRadius="12px"
-          border="1px solid"
-          fontSize="12px"
-          fontWeight="700"
-          bg={activeView === "code" ? "myGray.100" : "white"}
-          borderColor={activeView === "code" ? "myGray.300" : "myGray.200"}
-          color={activeView === "code" ? "myGray.900" : "myGray.700"}
-          _hover={{ bg: activeView === "code" ? "myGray.100" : "myGray.50" }}
-          onClick={() => onChangeView("code")}
-        >
+        </button>
+        <button style={viewButtonStyle(activeView === "code")} type="button" onClick={() => onChangeView("code")}>
           代码
-        </Button>
+        </button>
         <Flex w="1px" h="20px" bg="myGray.200" mx={1} />
         <Flex align="center" gap={2} minW={0} overflowX="auto" pl={1}>
           {openedFiles.map((path) => {
