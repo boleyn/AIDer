@@ -1,148 +1,206 @@
-# Next.js AI Studio (Fullstack)
+# Next.js AI Studio
 
-这是一个前后端一体化示例：
-- **前端**：Next.js 页面 + Sandpack 运行远程代码
-- **后端**：Next.js API Route `/api/code` 根据 token 返回代码包
+一个可私有化部署的全栈 AI Studio 示例，基于 Next.js（Pages Router）构建，集成了聊天编排、项目代码工作区、Skills 工作流、MCP 工具接入与基础账号体系。
 
-## 启动
+## 功能介绍
+
+- AI 聊天与工具调用
+  - 聊天接口：`/api/chat/completions`
+  - 支持流式输出（SSE）
+  - 支持 Agent 工具链（文件操作、项目工具、MCP 工具）
+- 项目代码工作区
+  - 项目列表、项目编辑、运行预览
+  - 代码数据由后端 API 提供（可接入自定义后端逻辑）
+- Skills 体系
+  - 项目内技能目录：`skills/<skill-name>/SKILL.md`
+  - Skills 管理 API：`/api/agent/skills/*`
+  - Skills Studio 页面：`/skills/create`
+- MCP 接入
+  - 支持通过 `MCP_SERVER_URLS` 配置多个 MCP SSE 服务
+  - 支持为单个 MCP 服务配置请求头
+- 登录鉴权
+  - 账号登录/注册
+  - Feishu OAuth 登录（可选）
+- 文件与对象存储
+  - 聊天附件/项目文件使用 S3 兼容对象存储（MinIO / AWS S3）
+
+## 技术栈
+
+- Next.js 14（Pages Router）
+- TypeScript
+- Chakra UI
+- MongoDB（项目、会话、用户等元数据）
+- S3 兼容对象存储（MinIO / AWS S3）
+
+## 项目结构
+
+```text
+src/
+  pages/        # 页面与 API Route
+  server/       # 服务端能力（鉴权、存储、agent、skills）
+  features/     # 业务模块
+  components/   # 通用组件
+  shared/       # 跨模块共享能力
+skills/         # 项目内 skills
+config/         # 模型与解析配置
+data/           # 本地开发数据目录
+```
+
+## 环境要求
+
+- Node.js 20+
+- Yarn 4.5.1（仓库使用 Yarn Berry）
+- MongoDB（必需）
+- S3 兼容对象存储（必需，推荐 MinIO）
+
+## 配置说明（`.env`）
+
+先复制：
 
 ```bash
-cd examples/nextjs-ai-studio
+cp .env.example .env
+```
+
+### 1) 必填
+
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017/nextjs_ai_studio
+JWT_SECRET=replace_with_a_long_random_secret
+
+# 建议本地 HTTP 开发时明确设置
+AUTH_COOKIE_SECURE=false
+
+# 二选一优先级：AIPROXY > OpenAI 兼容
+AIPROXY_API_ENDPOINT=
+AIPROXY_API_TOKEN=
+# 或者
+OPENAI_BASE_URL=
+CHAT_API_KEY=
+
+# 对象存储（MinIO / S3）
+STORAGE_REGION=us-east-1
+STORAGE_ACCESS_KEY_ID=
+STORAGE_SECRET_ACCESS_KEY=
+STORAGE_PUBLIC_BUCKET=
+STORAGE_PRIVATE_BUCKET=
+STORAGE_S3_ENDPOINT=
+STORAGE_S3_FORCE_PATH_STYLE=true
+STORAGE_S3_MAX_RETRIES=3
+```
+
+### 2) 常用可选
+
+```env
+# 模型目录配置文件（JSON5）
+CHAT_MODEL_CONFIG_FILE=config/config.json
+
+# MCP（推荐 JSON 数组格式）
+MCP_SERVER_URLS=[{"name":"mcp-example","url":"http://127.0.0.1:8000/sse"}]
+
+# Agent 兼容模式 skill 文件（当项目 skills 不可用时）
+AGENT_SKILL_FILE=skills/aistudio-mcp-code-workflow/SKILL.md
+
+# 对外访问地址（用于生成链接）
+STORAGE_EXTERNAL_ENDPOINT=http://127.0.0.1:3000
+```
+
+### 3) Feishu 登录（可选）
+
+```env
+FEISHU_APP_ID=
+FEISHU_REDIRECT_URI=http://localhost:3000/auth/feishu/callback
+FEISHU_APP_SECRET=
+FEISHU_DEFAULT_PASSWORD=Feishu@123456
+```
+
+### 4) Agent 调参（可选）
+
+```env
+TOOL_CALL_MODEL=
+NORMAL_MODEL=
+AI_RECURSION_LIMIT=
+AI_MAX_CONTEXT=
+AI_TEMPERATURE=0.2
+```
+
+## 本地开发
+
+```bash
 yarn
 yarn dev
 ```
 
 访问：
+
 - `http://localhost:3000`
-- `http://localhost:3000/project/hello`
-- `http://localhost:3000/project/three`
+- `http://localhost:3000/skills/create`
 
-## 目录分包（重构后）
+## 生产构建
 
-项目已按前后端一体化方式拆分到 `src/`：
+```bash
+yarn build
+yarn start
+```
 
-- `src/pages`：页面路由与 API Route（Next.js Pages Router）
-- `src/server`：服务端能力（鉴权、存储仓库、Agent 工具）
-- `src/features`：业务特性模块（如 `chat`、`dashboard`、`auth`）
-- `src/components`：跨页面 UI 组件
-- `src/shared`：跨业务共享基础能力（消息解析、流式请求、polyfill）
-- `src/ai`、`src/global`：AI 领域模型与兼容层
-- `src/utils`：预留（本次已将通用能力收口到 `src/shared`）
+## Docker 部署
 
-并新增别名：
+### 1) 构建镜像
 
-- `@server/* -> src/server/*`
-- `@features/* -> src/features/*`
-- `@shared/* -> src/shared/*`
-- `@/* -> src/*`
+```bash
+docker build -t nextjs-ai-studio:latest .
+```
 
-## AI 代码智能体
+### 2) 准备 `.env`
 
-- API：`POST /api/agent?token=<token>`
-- 流式输出：`POST /api/agent?token=<token>&stream=1`（SSE）
-- 需要配置 `.env`（支持 OpenAI / Google）
-- 选择模型提供方：`AI_PROVIDER=openai` 或 `AI_PROVIDER=google`
-- OpenAI：`OPENAI_API_KEY`（可选 `OPENAI_MODEL` / `AI_MODEL`，代理用 `OPENAI_BASE_URL`）
-- Google：`GOOGLE_API_KEY`（可选 `GOOGLE_MODEL`，代理用 `GOOGLE_BASE_URL`）
-- 支持 `/global` 指令：查看、搜索、替换文件内容等
-- 可通过 `MCP_SERVER_URLS`（AIChat 风格 JSON 或逗号分隔）接入 MCP 工具
-- 支持 SSE MCP Server（如 `http://host:port/sse`），并自动注入为可调用函数工具
-- 可选为每个 MCP server 传递 `headers`
-- 聊天模型目录支持 `config/config.json` 静态配置：`{ "model": [{"id":"...","label":"..."}] }`
+将生产环境变量写入 `.env`（重点检查 Mongo、对象存储、模型凭证）。
 
-示例：
+### 3) 使用 compose 启动
+
+```bash
+docker compose up -d --build
+```
+
+默认端口：`3000`。
+
+## Skills 使用约定
+
+- Skill 文件必须位于：`skills/<skill-name>/SKILL.md`
+- `skill-name` 需满足：`^[a-z0-9]+(-[a-z0-9]+)*$`
+- `SKILL.md` frontmatter 至少包含：
+  - `name`
+  - `description`
+
+相关 API：
+
+- `GET /api/agent/skills`
+- `GET /api/agent/skills/[name]`
+- `POST /api/agent/skills/validate`
+- `POST /api/agent/skills/reload`
+- `POST /api/agent/skills/create`
+
+## MCP 配置示例
+
+基础：
+
 ```env
 MCP_SERVER_URLS=[{"name":"mcp-gitlab-kb","url":"http://10.21.8.6:8008/sse"}]
 ```
 
-带鉴权头：
+带请求头：
+
 ```env
 MCP_SERVER_URLS=[{"name":"mcp-private","url":"https://example.com/sse","headers":{"Authorization":"Bearer xxx"}}]
 ```
 
-示例：
-```
-/global list
-/global {"action":"read","path":"/App.js"}
-```
+## 常见问题
 
-## Agent Skills（项目内）
+- 登录后又跳回登录页
+  - 检查 `AUTH_COOKIE_SECURE`。HTTP 场景建议设为 `false`。
+- 聊天报缺少模型凭证
+  - 检查 `AIPROXY_API_TOKEN` 或 `CHAT_API_KEY` 是否已配置。
+- 文件上传或项目读写失败
+  - 检查对象存储配置与 bucket 权限，确认 `STORAGE_*` 变量完整。
 
-支持在仓库 `skills/` 目录下定义可复用技能，并在对话中按需加载（OpenCode/Codex 风格）：
+## License
 
-- 目录规范：`skills/<skill-name>/SKILL.md`
-- `SKILL.md` frontmatter 必填：
-  - `name`：必须与目录名一致，正则 `^[a-z0-9]+(-[a-z0-9]+)*$`
-  - `description`：1-1024 字符
-- 可选字段：`license`、`compatibility`、`metadata`
-
-运行时行为：
-
-- 有可用 skills 时，系统提示会注入 `<available_skills>` 摘要列表
-- 模型通过 `skill_load` 工具按名称显式加载 skill 正文
-- 如果未发现任何 skills，会回退到旧配置 `AGENT_SKILL_FILE`（兼容模式）
-
-管理 API（需登录）：
-
-- `GET /api/agent/skills`：列出已发现 skills 与校验状态
-- `GET /api/agent/skills/[name]`：查看单个 skill 详情与正文
-- `POST /api/agent/skills/validate`：校验全部或指定 skill（body/query 传 `name`）
-- `POST /api/agent/skills/reload`：清缓存并重新扫描
-- `POST /api/agent/skills/create`：创建新 skill（`name` + `description`，可选 `body`）
-- `POST /api/agent/skills/install-skill-creator`：安装内置 `skill-creator` 到项目 `skills/skill-creator/SKILL.md`
-
-Skill 创建工作台（独立流程）：
-
-- 路由：`/skills/create`
-- 交互：左侧对话、右侧 workspace 文件预览
-- 存储：`data/skill-workspaces/<workspaceId>/`（与项目 `data/projects/*` 隔离）
-- API：
-  - `POST /api/skills/workspaces/create`
-  - `GET /api/skills/workspaces/[workspaceId]/files`
-  - `POST /api/skills/chat/completions`
-
-## API 返回格式
-
-`/api/code?token=<token>` 返回示例：
-
-```json
-{
-  "template": "react",
-  "files": {
-    "/App.js": "export default function App() { return <h1>Hi</h1>; }"
-  },
-  "dependencies": {
-    "lodash": "^4.17.21"
-  }
-}
-```
-
-你可以把 API Route 替换成真实的后端逻辑（数据库 / Git / 对象存储）。
-
-当前默认实现：项目元数据存 MongoDB（`projects` 集合），项目文件内容存本地目录 `data/projects/<token>/`。
-
-## 登录鉴权与飞书快捷登录
-
-本示例已加入账号登录/注册与飞书快捷登录：
-
-- 账号登录/注册：`/login`
-- 飞书登录回调：`/auth/feishu/callback`
-- 服务端鉴权：所有 `api/*` 已要求登录（携带 `Authorization: Bearer <token>` 或 `auth_token` Cookie）
-
-需要配置以下环境变量：
-
-```
-MONGODB_URI=your_mongodb_uri
-JWT_SECRET=your_jwt_secret
-AUTH_COOKIE_SECURE=false
-
-# 飞书 OAuth
-FEISHU_APP_ID=your_feishu_app_id
-FEISHU_REDIRECT_URI=http://localhost:3000/auth/feishu/callback
-FEISHU_APP_SECRET=your_feishu_app_secret
-FEISHU_DEFAULT_PASSWORD=Feishu@123456
-```
-
-说明：
-- 飞书登录若发现账号不存在，会自动注册并写入默认密码（`FEISHU_DEFAULT_PASSWORD`）。
-- 若通过 `http://IP:3000` 访问（非 HTTPS），生产部署请设置 `AUTH_COOKIE_SECURE=false`，否则浏览器不会携带 `auth_token` Cookie，可能出现登录后反复跳回登录页。
+Apache-2.0
