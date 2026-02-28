@@ -25,10 +25,12 @@ import {
   AlertDialogContent,
   AlertDialogOverlay,
 } from "@chakra-ui/react";
+import { keyframes } from "@emotion/react";
 import { PencilIcon, CloseIcon } from "../common/Icon";
 import type { ProjectListItem } from "../../types/project";
 
 type ProjectCardProps = {
+  index: number;
   project: ProjectListItem;
   formatDate: (dateString: string) => string;
   onOpen: (token: string) => void;
@@ -36,7 +38,19 @@ type ProjectCardProps = {
   onDelete: (token: string) => Promise<void>;
 };
 
+const cardFadeIn = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+`;
+
 export function ProjectCard({
+  index,
   project,
   formatDate,
   onOpen,
@@ -99,19 +113,47 @@ export function ProjectCard({
       <Card
         role="group"
         cursor="pointer"
+        position="relative"
         borderRadius="2xl"
         border="1px solid rgba(255,255,255,0.7)"
         bg="rgba(255,255,255,0.8)"
         backdropFilter="blur(14px)"
         overflow="hidden"
-        transition="all 0.2s ease"
+        transition="all 0.25s ease"
+        animation={`${cardFadeIn} 0.35s ease-out both`}
+        style={{ animationDelay: `${Math.min(index * 0.06, 0.36)}s` }}
         _hover={{
-          borderColor: "rgba(255,255,255,0.9)",
+          borderColor: "rgba(126, 171, 255, 0.7)",
           boxShadow: "0 18px 40px -18px rgba(15, 23, 42, 0.35)",
-          transform: "translateY(-2px)",
+          transform: "translateY(-4px)",
         }}
         onClick={handleCardClick}
       >
+        <Box
+          position="absolute"
+          top="-40px"
+          right="-38px"
+          w="130px"
+          h="130px"
+          borderRadius="full"
+          pointerEvents="none"
+          bgGradient="radial(circle at center, rgba(51,112,255,0.22), rgba(51,112,255,0))"
+          transition="transform 0.25s ease"
+          _groupHover={{ transform: "scale(1.08) translate(-4px, 4px)" }}
+        />
+        <Box
+          position="absolute"
+          bottom="-36px"
+          left="-22px"
+          w="110px"
+          h="110px"
+          borderRadius="full"
+          pointerEvents="none"
+          bgGradient="radial(circle at center, rgba(18,183,106,0.16), rgba(18,183,106,0))"
+          transition="opacity 0.25s ease"
+          opacity={0.7}
+          _groupHover={{ opacity: 1 }}
+        />
         <CardBody p={5}>
           <Flex justify="space-between" align="flex-start" gap={3}>
             <Box flex={1} minW={0}>
@@ -132,7 +174,9 @@ export function ProjectCard({
               data-card-actions
               align="center"
               gap={1}
-              opacity={{ base: 1, _groupHover: 1 }}
+              opacity={0.75}
+              transition="opacity 0.2s ease"
+              _groupHover={{ opacity: 1 }}
               onClick={(e) => e.stopPropagation()}
             >
               <IconButton

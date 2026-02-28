@@ -1074,7 +1074,7 @@ const ChatPanel = ({
   return (
     <Flex
       backdropFilter="blur(10px)"
-      bg="rgba(255,255,255,0.9)"
+      bg="transparent"
       border="1px solid"
       borderBottomLeftRadius="xl"
       borderColor="rgba(203,213,225,0.85)"

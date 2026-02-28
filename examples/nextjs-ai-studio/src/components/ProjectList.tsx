@@ -23,7 +23,7 @@ import {
   Spinner,
   Text,
 } from "@chakra-ui/react";
-import { LogoIcon } from "./common/Icon";
+import { AddIcon, LogoIcon } from "./common/Icon";
 import { AccountModal } from "./AccountModal";
 import { ProjectCard } from "./ProjectCard";
 import { useAuth } from "../contexts/AuthContext";
@@ -148,6 +148,10 @@ export default function ProjectList() {
                       borderRadius="md"
                       onClick={handleOpenCreateModal}
                       isLoading={creating}
+                      leftIcon={<Box as={AddIcon} w={4} h={4} />}
+                      iconSpacing={2.5}
+                      fontWeight="medium"
+                      color="primary.700"
                       _hover={{ bg: "myGray.100" }}
                     >
                       新建项目
@@ -267,6 +271,9 @@ export default function ProjectList() {
                   onClick={handleOpenCreateModal}
                   isLoading={creating}
                   loadingText="创建中..."
+                  leftIcon={<Box as={AddIcon} w={4} h={4} />}
+                  iconSpacing={2.5}
+                  borderRadius="lg"
                 >
                   新建项目
                 </Button>
@@ -292,6 +299,8 @@ export default function ProjectList() {
                       variant="whitePrimary"
                       onClick={handleOpenCreateModal}
                       isLoading={creating}
+                      leftIcon={<Box as={AddIcon} w={4} h={4} />}
+                      iconSpacing={2.5}
                     >
                       创建第一个项目
                     </Button>
@@ -306,9 +315,10 @@ export default function ProjectList() {
                   }}
                   gap={5}
                 >
-                  {projects.map((project) => (
+                  {projects.map((project, index) => (
                     <ProjectCard
                       key={project.token}
+                      index={index}
                       project={project}
                       formatDate={formatDate}
                       onOpen={openProject}

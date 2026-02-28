@@ -42,6 +42,12 @@ const ChatInput = ({
   const [isFocused, setIsFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const resetTextareaHeight = useCallback(() => {
+    const textarea = textAreaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "50px";
+    textarea.style.overflowY = "hidden";
+  }, []);
   const isInputLocked = isSending || isSubmitting;
   const hasUploadingFiles = useMemo(
     () => files.some((item) => item.uploadState === "uploading"),
@@ -95,12 +101,17 @@ const ChatInput = ({
       const textarea = textAreaRef.current;
       if (!textarea) return;
       textarea.focus();
-      textarea.style.height = "50px";
+      resetTextareaHeight();
       const nextHeight = Math.min(textarea.scrollHeight, 128);
       textarea.style.height = `${nextHeight}px`;
       textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
     }, 0);
-  }, [prefillText, prefillVersion]);
+  }, [prefillText, prefillVersion, resetTextareaHeight]);
+
+  useEffect(() => {
+    if (text.length > 0) return;
+    resetTextareaHeight();
+  }, [resetTextareaHeight, text]);
 
   const uploadSingleFile = useCallback(
     async (fileItem: LocalInputFile) => {
@@ -201,15 +212,19 @@ const ChatInput = ({
     setIsSubmitting(true);
     setText("");
     setFiles([]);
+    resetTextareaHeight();
+    window.requestAnimationFrame(() => {
+      resetTextareaHeight();
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     Promise.resolve(onSend(payload)).finally(() => {
       setIsSubmitting(false);
     });
-  }, [canSend, files, onSend, text]);
+  }, [canSend, files, onSend, resetTextareaHeight, text]);
 
   return (
-    <Box bg="white" px={4} py={3}>
+    <Box px={4} py={3}>
       <Flex
         bg="white"
         border="0.5px solid"
@@ -334,7 +349,7 @@ const ChatInput = ({
             onChange={(event) => {
               setText(event.target.value);
               const textarea = event.target;
-              textarea.style.height = "50px";
+              resetTextareaHeight();
               const nextHeight = Math.min(textarea.scrollHeight, 128);
               textarea.style.height = `${nextHeight}px`;
               textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
