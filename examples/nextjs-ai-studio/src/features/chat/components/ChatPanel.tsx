@@ -247,6 +247,7 @@ const ChatPanel = ({
   defaultHeaderTitle = "Code Assistant",
   emptyStateTitle,
   emptyStateDescription,
+  roundTop = true,
 }: {
   token: string;
   onFilesUpdated?: (files: Record<string, { code: string }>) => void;
@@ -259,6 +260,7 @@ const ChatPanel = ({
   defaultHeaderTitle?: string;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
+  roundTop?: boolean;
 }) => {
   const { t } = useTranslation();
   const router = useRouter();
@@ -1077,7 +1079,7 @@ const ChatPanel = ({
       borderBottomLeftRadius="xl"
       borderColor="rgba(203,213,225,0.85)"
       borderRight={0}
-      borderTopLeftRadius="xl"
+      borderTopLeftRadius={roundTop ? "xl" : 0}
       boxShadow="0 12px 30px -18px rgba(15,23,42,0.2)"
       direction="column"
       h={height}
