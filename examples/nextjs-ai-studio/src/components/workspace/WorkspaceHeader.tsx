@@ -35,10 +35,10 @@ const WorkspaceHeader = ({ activeView, onChangeView, status, error }: WorkspaceH
     >
       <Flex gap={2} align="center">
         <button style={viewButtonStyle(activeView === "preview")} type="button" onClick={() => onChangeView("preview")}>
-          Preview
+          预览
         </button>
         <button style={viewButtonStyle(activeView === "code")} type="button" onClick={() => onChangeView("code")}>
-          Code
+          代码
         </button>
       </Flex>
       <Flex align="center" gap={2} flexWrap="wrap" marginLeft="auto">

@@ -1,5 +1,5 @@
 import { Button, Flex, Text } from "@chakra-ui/react";
-import { BackIcon, SettingsIcon } from "@components/common/Icon";
+import { BackIcon } from "@components/common/Icon";
 
 type SkillsPageHeaderProps = {
   onBack: () => void;
@@ -10,15 +10,18 @@ const iconStyle = { width: 14, height: 14 };
 const SkillsPageHeader = ({ onBack }: SkillsPageHeaderProps) => {
   return (
     <Flex
+      as="header"
       align="center"
-      justify="space-between"
-      h="56px"
+      justify="flex-start"
+      gap={3}
+      wrap="wrap"
+      border="1px solid rgba(255,255,255,0.7)"
+      bg="rgba(255,255,255,0.75)"
+      backdropFilter="blur(18px)"
+      borderRadius="2xl"
       px={4}
-      borderBottom="1px solid"
-      borderColor="rgba(226,232,240,0.9)"
-      bg="rgba(255,255,255,0.82)"
-      backdropFilter="blur(10px)"
-      flexShrink={0}
+      py={3}
+      boxShadow="0 18px 40px -24px rgba(15, 23, 42, 0.25)"
     >
       <Button
         size="sm"
@@ -27,19 +30,20 @@ const SkillsPageHeader = ({ onBack }: SkillsPageHeaderProps) => {
         onClick={onBack}
         color="myGray.700"
       >
-        Back
+        返回
       </Button>
 
-      <Text fontSize="lg" fontWeight="700" color="myGray.800" letterSpacing="-0.01em">
-        Skills Studio
+      <Text
+        color="myGray.800"
+        fontSize="md"
+        fontWeight="600"
+        letterSpacing="-0.01em"
+        lineHeight="1.2"
+      >
+        技能工作台
       </Text>
-
-      <Button size="sm" variant="ghost" leftIcon={<SettingsIcon style={iconStyle} />} color="myGray.700">
-        设置
-      </Button>
     </Flex>
   );
 };
 
 export default SkillsPageHeader;
-

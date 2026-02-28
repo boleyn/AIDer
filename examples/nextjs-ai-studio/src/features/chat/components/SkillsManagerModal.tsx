@@ -116,6 +116,10 @@ const SkillsManagerModal = ({ isOpen, onClose, onUseSkill, onCreateViaChat }: Sk
       return name.includes(keyword) || description.includes(keyword);
     });
   }, [query, skills]);
+  const selectedSkillMeta = useMemo(
+    () => skills.find((item) => item.name === selectedName),
+    [selectedName, skills]
+  );
 
   const handleReload = async () => {
     setIsReloading(true);
@@ -220,10 +224,14 @@ const SkillsManagerModal = ({ isOpen, onClose, onUseSkill, onCreateViaChat }: Sk
                 <MyTooltip label="通过对话创建 skill">
                   <IconButton
                     aria-label="通过对话创建 skill"
+                    bg="blue.500"
+                    border="1px solid"
+                    borderColor="blue.500"
+                    color="white"
                     size="sm"
-                    colorScheme="blue"
-                    variant="outline"
                     icon={<EditIcon />}
+                    _hover={{ bg: "blue.600", borderColor: "blue.600" }}
+                    _active={{ bg: "blue.700", borderColor: "blue.700" }}
                     onClick={handleCreateInChat}
                     isLoading={isInstallingCreator}
                   />
@@ -322,10 +330,30 @@ const SkillsManagerModal = ({ isOpen, onClose, onUseSkill, onCreateViaChat }: Sk
                     <MyTooltip label="用于当前对话">
                       <IconButton
                         aria-label="用于当前对话"
-                        colorScheme="blue"
+                        bg="blue.500"
+                        border="1px solid"
+                        borderColor="blue.500"
+                        color="white"
                         size="sm"
                         icon={<RunIcon />}
+                        _hover={{ bg: "blue.600", borderColor: "blue.600" }}
+                        _active={{ bg: "blue.700", borderColor: "blue.700" }}
+                        _disabled={{
+                          bg: "gray.100",
+                          borderColor: "gray.200",
+                          color: "gray.400",
+                          cursor: "not-allowed",
+                        }}
+                        isDisabled={!selectedSkillMeta?.isLoadable}
                         onClick={() => {
+                          if (!selectedSkillMeta?.isLoadable) {
+                            toast({
+                              status: "warning",
+                              title: "该 skill 当前不可用，请先修复问题后再应用",
+                              duration: 1800,
+                            });
+                            return;
+                          }
                           onUseSkill?.(detail.name);
                           onClose();
                         }}

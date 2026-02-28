@@ -56,7 +56,7 @@ const SkillsStudioTopBar = ({
           _hover={{ bg: activeView === "preview" ? "myGray.100" : "myGray.50" }}
           onClick={() => onChangeView("preview")}
         >
-          Preview
+          预览
         </Button>
         <Button
           h="36px"
@@ -72,7 +72,7 @@ const SkillsStudioTopBar = ({
           _hover={{ bg: activeView === "code" ? "myGray.100" : "myGray.50" }}
           onClick={() => onChangeView("code")}
         >
-          Code
+          代码
         </Button>
         <Flex w="1px" h="20px" bg="myGray.200" mx={1} />
         <Flex align="center" gap={2} minW={0} overflowX="auto" pl={1}>
@@ -104,7 +104,7 @@ const SkillsStudioTopBar = ({
                   {label}
                 </Text>
                 <IconButton
-                  aria-label="Close file tab"
+                  aria-label="关闭文件标签"
                   size="xs"
                   variant="ghost"
                   icon={<CloseIcon />}

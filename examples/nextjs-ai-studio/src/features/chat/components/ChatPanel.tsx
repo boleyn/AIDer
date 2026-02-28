@@ -18,6 +18,7 @@ import {
 import { updateMessageFeedback } from "../services/feedback";
 import { getChatModels } from "../services/models";
 import type { ChatModelCatalog } from "../services/models";
+import { listSkills } from "../services/skills";
 import type { ChatInputFile, ChatInputSubmitPayload } from "../types/chatInput";
 import type { UploadedFileArtifact } from "../types/fileArtifact";
 import { getExecutionSummary } from "../utils/executionSummary";
@@ -244,7 +245,7 @@ const ChatPanel = ({
   completionsExtraBody,
   hideSkillsManager = false,
   autoCreateInitialConversation = true,
-  defaultHeaderTitle = "Code Assistant",
+  defaultHeaderTitle = "代码助手",
   emptyStateTitle,
   emptyStateDescription,
   roundTop = true,
@@ -287,8 +288,8 @@ const ChatPanel = ({
   const [channel, setChannel] = useState("aiproxy");
   const [model, setModel] = useState("agent");
   const [isSkillsOpen, setIsSkillsOpen] = useState(false);
-  const [prefillText, setPrefillText] = useState("");
-  const [prefillVersion, setPrefillVersion] = useState(0);
+  const [selectedSkill, setSelectedSkill] = useState<string | undefined>(undefined);
+  const [skillOptions, setSkillOptions] = useState<Array<{ name: string; description?: string }>>([]);
   const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string; channel: string; icon?: string }>>([
     { value: "agent", label: "agent", channel: "aiproxy" },
   ]);
@@ -432,6 +433,28 @@ const ChatPanel = ({
   }, [channel, model, modelCatalog]);
 
   useEffect(() => {
+    let active = true;
+    listSkills()
+      .then((result) => {
+        if (!active) return;
+        const next = (result.skills || [])
+          .filter((item) => item.isLoadable && typeof item.name === "string" && item.name.length > 0)
+          .map((item) => ({
+            name: item.name as string,
+            description: item.description,
+          }));
+        setSkillOptions(next);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSkillOptions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isSkillsOpen]);
+
+  useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
@@ -567,6 +590,7 @@ const ChatPanel = ({
         additional_kwargs: {
           ...(userMessage.additional_kwargs || {}),
           imageInputParts,
+          ...(payload.selectedSkill ? { selectedSkill: payload.selectedSkill } : {}),
         },
       };
 
@@ -730,22 +754,29 @@ const ChatPanel = ({
               ...(conversationId ? { conversationId } : {}),
               channel,
               model,
+              ...(payload.selectedSkill ? { selectedSkill: payload.selectedSkill } : {}),
               ...(completionsExtraBody || {}),
             }),
           });
-          const payload = await response.json().catch(() => ({}));
+          const responsePayload = await response.json().catch(() => ({}));
           if (!response.ok) {
-            throw new Error(typeof payload?.error === "string" ? payload.error : "请求失败");
+            throw new Error(
+              typeof responsePayload?.error === "string" ? responsePayload.error : "请求失败"
+            );
           }
           const assistantText =
-            typeof payload?.assistant?.content === "string" ? payload.assistant.content : "已完成";
+            typeof responsePayload?.assistant?.content === "string"
+              ? responsePayload.assistant.content
+              : "已完成";
           const assistantReasoning =
-            typeof payload?.assistant?.reasoning === "string" ? payload.assistant.reasoning : "";
+            typeof responsePayload?.assistant?.reasoning === "string"
+              ? responsePayload.assistant.reasoning
+              : "";
           streamingTextRef.current = assistantText;
           streamingReasoningRef.current = assistantReasoning;
 
           if (onFilesUpdated) {
-            const files = toUpdatedFilesMap(payload?.files);
+            const files = toUpdatedFilesMap(responsePayload?.files);
             if (files) onFilesUpdated(files);
           }
         } else {
@@ -758,6 +789,7 @@ const ChatPanel = ({
               ...(conversationId ? { conversationId } : {}),
               channel,
               model,
+              ...(payload.selectedSkill ? { selectedSkill: payload.selectedSkill } : {}),
               ...(completionsExtraBody || {}),
             },
             headers: withAuthHeaders(),
@@ -1046,9 +1078,10 @@ const ChatPanel = ({
         text,
         files: [],
         uploadedFiles: [],
+        selectedSkill,
       }, { echoUserMessage: false });
     },
-    [handleSend, isSending, messages]
+    [handleSend, isSending, messages, selectedSkill]
   );
 
   const activeConversationTitle = useMemo(
@@ -1057,9 +1090,7 @@ const ChatPanel = ({
   );
 
   const handleUseSkill = useCallback((skillName: string) => {
-    const prompt = `请先调用 skill_load 工具加载技能 "${skillName}"，再按技能流程完成我的需求。`;
-    setPrefillText(prompt);
-    setPrefillVersion((value) => value + 1);
+    setSelectedSkill(skillName);
   }, []);
 
   const handleCreateSkillViaChat = useCallback(() => {
@@ -1095,9 +1126,7 @@ const ChatPanel = ({
         onDeleteAllConversations={() => deleteAllConversations()}
         onDeleteConversation={(id) => deleteConversation(id)}
         onNewConversation={() => createNewConversation()}
-        onOpenSkills={() => {
-          if (!hideSkillsManager) setIsSkillsOpen(true);
-        }}
+        onOpenSkills={!hideSkillsManager ? () => setIsSkillsOpen(true) : undefined}
         onSelectConversation={(id) => loadConversation(id)}
         title={activeConversationTitle}
       />
@@ -1168,9 +1197,10 @@ const ChatPanel = ({
           model={model}
           modelLoading={modelLoading}
           modelOptions={modelOptions}
-          prefillText={prefillText}
-          prefillVersion={prefillVersion}
+          selectedSkill={selectedSkill}
+          skillOptions={skillOptions}
           onChangeModel={setModel}
+          onChangeSelectedSkill={setSelectedSkill}
           onUploadFiles={prepareUploadFiles}
           onSend={handleSend}
           onStop={handleStop}

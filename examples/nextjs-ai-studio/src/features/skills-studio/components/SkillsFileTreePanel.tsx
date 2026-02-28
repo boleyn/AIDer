@@ -79,7 +79,7 @@ const SkillsFileTreePanel = ({
   return (
     <Flex direction="column" h="100%" minH={0} p={2} borderRight="1px solid" borderColor="rgba(226,232,240,0.9)">
       <Text color="myGray.500" fontSize="xs" mb={2} fontWeight="600">
-        File Explorer
+        文件浏览器
       </Text>
       <InputGroup size="sm" mb={2}>
         <InputLeftElement pointerEvents="none">

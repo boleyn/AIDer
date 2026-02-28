@@ -50,7 +50,7 @@ const SkillsEditorPanel = ({
         </Text>
         {!content ? (
           <Text color="myGray.500" fontSize="sm">
-            (empty)
+            （空内容）
           </Text>
         ) : isMarkdownFile ? (
           <Markdown source={content} />

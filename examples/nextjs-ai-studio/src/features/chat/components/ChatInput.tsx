@@ -27,9 +27,12 @@ const ChatInput = ({
   model,
   modelOptions,
   modelLoading,
+  selectedSkill,
+  skillOptions = [],
   prefillText,
   prefillVersion,
   onChangeModel,
+  onChangeSelectedSkill,
   onUploadFiles,
   onSend,
   onStop,
@@ -40,8 +43,25 @@ const ChatInput = ({
   const [isComposing, setIsComposing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [activeSkillIndex, setActiveSkillIndex] = useState(0);
+  const [skillQuery, setSkillQuery] = useState("");
+  const [mentionRange, setMentionRange] = useState<{ start: number; end: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const updateMentionState = useCallback((value: string, cursorPosition: number) => {
+    const safeCursor = Math.max(0, Math.min(cursorPosition, value.length));
+    const prefix = value.slice(0, safeCursor);
+    const match = prefix.match(/(^|\s)@([a-zA-Z0-9_-]*)$/);
+    if (!match) {
+      setMentionRange(null);
+      setSkillQuery("");
+      return;
+    }
+    const query = match[2] || "";
+    const mentionStart = safeCursor - query.length - 1;
+    setMentionRange({ start: mentionStart, end: safeCursor });
+    setSkillQuery(query.toLowerCase());
+  }, []);
   const resetTextareaHeight = useCallback(() => {
     const textarea = textAreaRef.current;
     if (!textarea) return;
@@ -67,6 +87,23 @@ const ChatInput = ({
       (text.trim().length > 0 || files.length > 0),
     [files.length, hasUploadErrors, hasUploadingFiles, isSending, isSubmitting, text]
   );
+  const filteredSkillOptions = useMemo(() => {
+    const keyword = skillQuery.trim();
+    const available = skillOptions.filter((item) => Boolean(item.name && item.name !== selectedSkill));
+    if (!keyword) return available.slice(0, 8);
+    return available
+      .filter((item) => {
+        const name = item.name.toLowerCase();
+        const description = (item.description || "").toLowerCase();
+        return name.includes(keyword) || description.includes(keyword);
+      })
+      .slice(0, 8);
+  }, [selectedSkill, skillOptions, skillQuery]);
+  const showSkillPicker =
+    Boolean(mentionRange) &&
+    filteredSkillOptions.length > 0 &&
+    !isSending &&
+    !isSubmitting;
   const previewFiles = useMemo(
     () =>
       files.map((item) => {
@@ -112,6 +149,35 @@ const ChatInput = ({
     if (text.length > 0) return;
     resetTextareaHeight();
   }, [resetTextareaHeight, text]);
+  useEffect(() => {
+    setActiveSkillIndex(0);
+  }, [skillQuery, showSkillPicker]);
+
+  const applySelectedSkill = useCallback(
+    (skillName: string) => {
+      onChangeSelectedSkill?.(skillName);
+      if (!mentionRange) return;
+      const nextText = `${text.slice(0, mentionRange.start)}${text.slice(mentionRange.end)}`.replace(
+        /\s{2,}/g,
+        " "
+      );
+      setText(nextText);
+      setMentionRange(null);
+      setSkillQuery("");
+      window.requestAnimationFrame(() => {
+        const textarea = textAreaRef.current;
+        if (!textarea) return;
+        const cursor = Math.max(0, mentionRange.start);
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+        resetTextareaHeight();
+        const nextHeight = Math.min(textarea.scrollHeight, 128);
+        textarea.style.height = `${nextHeight}px`;
+        textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
+      });
+    },
+    [mentionRange, onChangeSelectedSkill, resetTextareaHeight, text]
+  );
 
   const uploadSingleFile = useCallback(
     async (fileItem: LocalInputFile) => {
@@ -207,6 +273,7 @@ const ChatInput = ({
       text: text.trim(),
       files: selectedFiles,
       uploadedFiles,
+      selectedSkill: selectedSkill || undefined,
     };
 
     setIsSubmitting(true);
@@ -329,53 +396,170 @@ const ChatInput = ({
         ) : null}
 
         <Flex align="center" px={2}>
-          <Textarea
-            ref={textAreaRef}
-            _focusVisible={{ border: "none", boxShadow: "none" }}
-            _placeholder={{
-              color: "#707070",
-              fontSize: "13px",
-            }}
-            border="none"
-            color="myGray.900"
-            fontSize="1rem"
-            fontWeight={400}
-            lineHeight="1.5"
-            maxH="128px"
-            mb={0}
-            minH="50px"
-            isDisabled={isInputLocked}
-            onBlur={() => setIsFocused(false)}
-            onChange={(event) => {
-              setText(event.target.value);
-              const textarea = event.target;
-              resetTextareaHeight();
-              const nextHeight = Math.min(textarea.scrollHeight, 128);
-              textarea.style.height = `${nextHeight}px`;
-              textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
-            }}
-            onCompositionEnd={() => setIsComposing(false)}
-            onCompositionStart={() => setIsComposing(true)}
-            onFocus={() => setIsFocused(true)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                if (isComposing) return;
-                event.preventDefault();
-                handleSend();
-              }
-            }}
-            overflowX="hidden"
-            overflowY="hidden"
-            placeholder={t("chat:input_placeholder", {
-              defaultValue: "输入你的问题，按 Enter 发送，Shift + Enter 换行",
-            })}
-            px={2}
-            resize="none"
-            rows={1}
-            value={text}
-            w="100%"
-            whiteSpace="pre-wrap"
-          />
+          <Box position="relative" w="100%">
+            {selectedSkill ? (
+              <Flex px={2} pt={2}>
+                <Flex
+                  align="center"
+                  bg="#EFF6FF"
+                  border="1px solid"
+                  borderColor="#BFDBFE"
+                  borderRadius="10px"
+                  color="#1E40AF"
+                  gap={1}
+                  h="28px"
+                  maxW="380px"
+                  pl={2.5}
+                  pr={1}
+                >
+                  <Text color="#1D4ED8" fontSize="11px" fontWeight={700} opacity={0.88}>
+                    skill
+                  </Text>
+                  <Text fontSize="13px" fontWeight={600} noOfLines={1}>
+                    {selectedSkill}
+                  </Text>
+                  <CloseButton
+                    color="#1D4ED8"
+                    onClick={() => onChangeSelectedSkill?.(undefined)}
+                    aria-label="清除技能选择"
+                    size="sm"
+                    transform="scale(0.88)"
+                  />
+                </Flex>
+              </Flex>
+            ) : null}
+            <Textarea
+              ref={textAreaRef}
+              _focusVisible={{ border: "none", boxShadow: "none" }}
+              _placeholder={{
+                color: "#707070",
+                fontSize: "13px",
+              }}
+              border="none"
+              color="myGray.900"
+              fontSize="1rem"
+              fontWeight={400}
+              lineHeight="1.5"
+              maxH="128px"
+              mb={0}
+              minH="50px"
+              isDisabled={isInputLocked}
+              onBlur={() => {
+                setIsFocused(false);
+                window.setTimeout(() => {
+                  setMentionRange(null);
+                  setSkillQuery("");
+                }, 80);
+              }}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setText(nextValue);
+                updateMentionState(nextValue, event.target.selectionStart ?? nextValue.length);
+                const textarea = event.target;
+                resetTextareaHeight();
+                const nextHeight = Math.min(textarea.scrollHeight, 128);
+                textarea.style.height = `${nextHeight}px`;
+                textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
+              }}
+              onCompositionEnd={() => setIsComposing(false)}
+              onCompositionStart={() => setIsComposing(true)}
+              onFocus={() => setIsFocused(true)}
+              onKeyDown={(event) => {
+                if (showSkillPicker) {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveSkillIndex((prev) => (prev + 1) % filteredSkillOptions.length);
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setActiveSkillIndex((prev) =>
+                      prev <= 0 ? filteredSkillOptions.length - 1 : prev - 1
+                    );
+                    return;
+                  }
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    // Keep Enter for normal send; skill selection should be explicit (click/Tab).
+                    setMentionRange(null);
+                    setSkillQuery("");
+                  }
+                  if (event.key === "Tab") {
+                    event.preventDefault();
+                    const picked = filteredSkillOptions[activeSkillIndex];
+                    if (picked?.name) {
+                      applySelectedSkill(picked.name);
+                    }
+                    return;
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setMentionRange(null);
+                    setSkillQuery("");
+                    return;
+                  }
+                }
+                if (event.key === "Enter" && !event.shiftKey) {
+                  if (isComposing) return;
+                  event.preventDefault();
+                  handleSend();
+                }
+              }}
+              overflowX="hidden"
+              overflowY="hidden"
+              placeholder={t("chat:input_placeholder", {
+                defaultValue: "输入你的问题，按 Enter 发送，Shift + Enter 换行",
+              })}
+              px={2}
+              resize="none"
+              rows={1}
+              value={text}
+              w="100%"
+              whiteSpace="pre-wrap"
+            />
+            {showSkillPicker ? (
+              <Box
+                bg="white"
+                border="1px solid"
+                borderColor="blue.100"
+                borderRadius="10px"
+                boxShadow="0 8px 24px rgba(15, 23, 42, 0.14)"
+                left={0}
+                maxH="220px"
+                overflowY="auto"
+                position="absolute"
+                right={0}
+                top="calc(100% + 4px)"
+                zIndex={30}
+              >
+                <Flex direction="column" p={1}>
+                  {filteredSkillOptions.map((item, index) => {
+                    const isActive = index === activeSkillIndex;
+                    return (
+                      <Box
+                        key={item.name}
+                        bg={isActive ? "blue.50" : "transparent"}
+                        borderRadius="8px"
+                        cursor="pointer"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          applySelectedSkill(item.name);
+                        }}
+                        px={2}
+                        py={1.5}
+                      >
+                        <Text color="myGray.900" fontSize="sm" fontWeight={700} noOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text color="myGray.500" fontSize="11px" mt={0.5} noOfLines={1}>
+                          {item.description || "无描述"}
+                        </Text>
+                      </Box>
+                    );
+                  })}
+                </Flex>
+              </Box>
+            ) : null}
+          </Box>
         </Flex>
 
         <Flex align="center" h="44px" justify="space-between" pb={2} pl={3} pr={3}>

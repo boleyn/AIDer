@@ -305,6 +305,19 @@ const getLastUserText = (messages: ConversationMessage[]) => {
   return extractText(lastUser.content).trim();
 };
 
+const getSelectedSkillFromMessages = (messages: ConversationMessage[]) => {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role !== "user") continue;
+    if (!message.additional_kwargs || typeof message.additional_kwargs !== "object") continue;
+    const selectedSkill = (message.additional_kwargs as { selectedSkill?: unknown }).selectedSkill;
+    if (typeof selectedSkill === "string" && selectedSkill.trim()) {
+      return selectedSkill.trim();
+    }
+  }
+  return "";
+};
+
 const detectUserIntent = (messages: ConversationMessage[]): UserIntent => {
   const text = getLastUserText(messages).toLowerCase();
   if (!text) return "general";
@@ -433,6 +446,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const channel = typeof req.body?.channel === "string" ? req.body.channel : "";
   const modelCatalogKey = typeof req.body?.modelCatalogKey === "string" ? req.body.modelCatalogKey : undefined;
   const model = typeof req.body?.model === "string" ? req.body.model : "agent";
+  const selectedSkillInput =
+    typeof req.body?.selectedSkill === "string" ? req.body.selectedSkill.trim() : "";
   const created = Math.floor(Date.now() / 1000);
   let streamStarted = false;
 
@@ -493,6 +508,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     artifact: message.artifact,
   }));
   const contextMessages = [...historyMessages, ...newMessages];
+  const selectedSkillRequested = selectedSkillInput || getSelectedSkillFromMessages(contextMessages);
   const nextTitleFromInput = getTitleFromMessages(contextMessages);
 
   const appendAssistantError = async (text: string) => {
@@ -605,6 +621,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const localTools = createProjectTools(token, tracker);
   const mcpTools = await loadMcpTools();
   const runtimeSkills = await getRuntimeSkills();
+  const selectedRuntimeSkill =
+    selectedSkillRequested.length > 0
+      ? runtimeSkills.find((item) => item.name === selectedSkillRequested) ||
+        runtimeSkills.find((item) => item.name.toLowerCase() === selectedSkillRequested.toLowerCase()) ||
+        null
+      : null;
   const skillLoadTool = runtimeSkills.length > 0 ? await createSkillLoadTool() : null;
   const allTools = [
     ...localTools,
@@ -614,7 +636,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const userIntent = detectUserIntent(contextMessages);
   const routedTools = routeToolsByIntent(allTools, userIntent);
   const selectedTools = routedTools.selectedTools;
-  const toolChoiceMode = selectedTools.length > 0 ? resolveToolChoice(userIntent) : "auto";
+  const toolChoiceMode = selectedTools.length > 0
+    ? selectedRuntimeSkill
+      ? "required"
+      : resolveToolChoice(userIntent)
+    : "auto";
   const toolRoutingPrompt = buildToolRoutingSystemPrompt(userIntent, routedTools, toolChoiceMode);
   const hasMcpTools = selectedTools.some((tool) => isMcpToolName(tool.name));
   const hasProjectKnowledgeTools = selectedTools.some((tool) => isProjectKnowledgeMcpTool(tool.name));
@@ -719,6 +745,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const systemPrompts: ChatCompletionMessageParam[] = [
     { role: "system", content: BASE_CODING_AGENT_PROMPT },
     { role: "system", content: toolRoutingPrompt },
+    ...(selectedRuntimeSkill
+      ? [
+          {
+            role: "system",
+            content: [
+              `User selected skill: ${selectedRuntimeSkill.name}`,
+              `You must call tool "skill_load" first with {"skill_name":"${selectedRuntimeSkill.name}"} before executing the task.`,
+              "After loading, follow that skill instructions for the rest of the task.",
+            ].join("\n"),
+          } as ChatCompletionMessageParam,
+        ]
+      : []),
     ...(skillsCatalogPrompt
       ? [{ role: "system", content: skillsCatalogPrompt } as ChatCompletionMessageParam]
       : []),
@@ -741,6 +779,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     userIntent,
     routeReason: routedTools.reason,
     toolChoiceMode,
+    selectedSkillRequested,
+    selectedSkillResolved: selectedRuntimeSkill?.name || "",
     routedToolCount: selectedTools.length,
     baseMessageCount: baseAgentMessages.length,
     finalMessageCount: agentMessages.length,

@@ -290,19 +290,21 @@ const SkillCreatePage = () => {
         py={{ base: 6, md: 8 }}
         position="relative"
         zIndex={1}
-        gap={0}
+        gap={{ base: 4, md: 5 }}
         overflow="hidden"
         boxSizing="border-box"
       >
-        <SkillsPageHeader
-          onBack={() => {
-            if (window.history.length > 1) {
-              router.back();
-              return;
-            }
-            void router.push("/");
-          }}
-        />
+        <Box>
+          <SkillsPageHeader
+            onBack={() => {
+              if (window.history.length > 1) {
+                router.back();
+                return;
+              }
+              void router.push("/");
+            }}
+          />
+        </Box>
         <Flex as="main" align="stretch" gap={0} flex="1" minH="0">
           <Box flex="0 0 auto" minW="320px" maxW="728px" w="560px" alignSelf="stretch" minH={0}>
             {isBootstrapping ? (
@@ -313,13 +315,13 @@ const SkillCreatePage = () => {
                 border="1px solid"
                 borderColor="rgba(203,213,225,0.85)"
                 borderBottomLeftRadius="xl"
-                borderTopLeftRadius={0}
+                borderTopLeftRadius="xl"
                 backdropFilter="blur(10px)"
                 bg="rgba(255,255,255,0.9)"
               >
                 <Flex align="center" color="myGray.500" gap={2}>
                   <Spinner size="sm" />
-                  <Text fontSize="sm">初始化 skill workspace...</Text>
+                  <Text fontSize="sm">正在初始化技能工作区...</Text>
                 </Flex>
               </Flex>
             ) : (
@@ -335,8 +337,8 @@ const SkillCreatePage = () => {
                 }}
                 hideSkillsManager
                 autoCreateInitialConversation={false}
-                roundTop={false}
-                defaultHeaderTitle="Skills Studio"
+                roundTop
+                defaultHeaderTitle="技能助手"
                 emptyStateTitle="创建你的第一个技能"
                 emptyStateDescription="先用一句话描述能力目标，我会生成 SKILL.md 并同步到右侧文件。"
                 onFilesUpdated={(nextFiles) => setFiles(nextFiles)}
@@ -369,7 +371,7 @@ const SkillCreatePage = () => {
             border="1px solid rgba(255,255,255,0.75)"
             borderTopLeftRadius={0}
             borderBottomLeftRadius={0}
-            borderTopRightRadius={0}
+            borderTopRightRadius="2xl"
             borderBottomRightRadius="2xl"
             bg="rgba(255,255,255,0.75)"
             backdropFilter="blur(22px)"

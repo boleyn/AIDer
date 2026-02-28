@@ -53,7 +53,7 @@ const ChatHeader = ({
     >
       <Box minW={0}>
         <Text color="myGray.800" fontSize="sm" fontWeight="800" maxW="230px" isTruncated>
-          {title || "Code Assistant"}
+          {title || "代码助手"}
         </Text>
         <Text color="myGray.500" fontSize="xs" mt={0.5}>
           对话数 {conversations.length}
@@ -61,20 +61,22 @@ const ChatHeader = ({
       </Box>
 
       <Flex gap={1}>
-        <IconButton
-          _hover={{ bg: "myGray.100" }}
-          aria-label="Skills"
-          borderRadius="10px"
-          icon={<SettingsIcon />}
-          onClick={onOpenSkills}
-          size="sm"
-          variant="ghost"
-        />
+        {onOpenSkills ? (
+          <IconButton
+            _hover={{ bg: "myGray.100" }}
+            aria-label="技能设置"
+            borderRadius="10px"
+            icon={<SettingsIcon />}
+            onClick={onOpenSkills}
+            size="sm"
+            variant="ghost"
+          />
+        ) : null}
 
         <Menu placement="bottom-end">
           <MenuButton
             _hover={{ bg: "myGray.100" }}
-            aria-label="Chat history"
+            aria-label="对话历史"
             as={IconButton}
             borderRadius="10px"
             icon={<ClockIcon />}
@@ -97,7 +99,7 @@ const ChatHeader = ({
                       {conversation.title || "未命名对话"}
                     </Text>
                     <IconButton
-                      aria-label="Delete conversation"
+                      aria-label="删除对话"
                       colorScheme="red"
                       icon={<CloseIcon />}
                       onClick={(event) => {
@@ -135,7 +137,7 @@ const ChatHeader = ({
 
         <IconButton
           _hover={{ bg: "myGray.100" }}
-          aria-label="New chat"
+          aria-label="新建对话"
           bg="white"
           border="1px solid"
           borderColor="myGray.200"
