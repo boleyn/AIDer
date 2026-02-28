@@ -33,7 +33,16 @@ export interface UseConversationsResult {
   setActiveConversation: (conversation: Conversation | null) => void;
 }
 
-export function useConversations(token: string, router: NextRouter): UseConversationsResult {
+interface UseConversationsOptions {
+  autoCreateInitialConversation?: boolean;
+}
+
+export function useConversations(
+  token: string,
+  router: NextRouter,
+  options?: UseConversationsOptions
+): UseConversationsResult {
+  const autoCreateInitialConversation = options?.autoCreateInitialConversation ?? true;
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
@@ -124,21 +133,23 @@ export function useConversations(token: string, router: NextRouter): UseConversa
 
     activeConversationIdRef.current = conversation.id;
     setActiveConversation(conversation);
-    setConversations((prev) => [conversation, ...prev.filter((item) => item.id !== conversation.id)]);
+    if (autoCreateInitialConversation) {
+      setConversations((prev) => [conversation, ...prev.filter((item) => item.id !== conversation.id)]);
 
-    if (queryConversationId !== conversation.id) {
-      router.replace(
-        {
-          pathname: router.pathname,
-          query: { ...router.query, conversation: conversation.id },
-        },
-        undefined,
-        { shallow: true }
-      );
+      if (queryConversationId !== conversation.id) {
+        router.replace(
+          {
+            pathname: router.pathname,
+            query: { ...router.query, conversation: conversation.id },
+          },
+          undefined,
+          { shallow: true }
+        );
+      }
     }
 
     return conversation;
-  }, [queryConversationId, router, token]);
+  }, [autoCreateInitialConversation, queryConversationId, router, token]);
 
   const ensureConversation = useCallback(async () => {
     if (activeConversation) return activeConversation;
@@ -168,12 +179,12 @@ export function useConversations(token: string, router: NextRouter): UseConversa
         setActiveConversation(null);
         if (nextConversationId) {
           await loadConversation(nextConversationId);
-        } else {
+        } else if (autoCreateInitialConversation) {
           await createNewConversation();
         }
       }
     },
-    [createNewConversation, loadConversation, token]
+    [autoCreateInitialConversation, createNewConversation, loadConversation, token]
   );
 
   const deleteAllConversations = useCallback(async () => {
@@ -182,8 +193,10 @@ export function useConversations(token: string, router: NextRouter): UseConversa
     setConversations([]);
     activeConversationIdRef.current = null;
     setActiveConversation(null);
-    await createNewConversation();
-  }, [createNewConversation, token]);
+    if (autoCreateInitialConversation) {
+      await createNewConversation();
+    }
+  }, [autoCreateInitialConversation, createNewConversation, token]);
 
   useEffect(() => {
     if (!token || !router.isReady) return;
@@ -206,13 +219,23 @@ export function useConversations(token: string, router: NextRouter): UseConversa
         if (active) setIsInitialized(true);
         return;
       }
-      await createNewConversation();
+      if (autoCreateInitialConversation) {
+        await createNewConversation();
+      }
       if (active) setIsInitialized(true);
     })();
     return () => {
       active = false;
     };
-  }, [createNewConversation, loadConversation, queryConversationId, refreshConversations, router.isReady, token]);
+  }, [
+    autoCreateInitialConversation,
+    createNewConversation,
+    loadConversation,
+    queryConversationId,
+    refreshConversations,
+    router.isReady,
+    token,
+  ]);
 
   return {
     conversations,

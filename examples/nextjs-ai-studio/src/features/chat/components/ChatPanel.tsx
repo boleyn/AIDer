@@ -25,6 +25,7 @@ import { type FlowNodeResponsePayload } from "../utils/flowNodeMessages";
 
 import ChatHeader from "./ChatHeader";
 import ChatInput from "./ChatInput";
+import SkillsManagerModal from "./SkillsManagerModal";
 import ChatMessageBlock from "./message/ChatMessageBlock";
 import type { MessageRating } from "./message/MessageActionBar";
 import ExecutionSummaryRow from "./ExecutionSummaryRow";
@@ -238,10 +239,26 @@ const ChatPanel = ({
   token,
   onFilesUpdated,
   height = "100%",
+  completionsPath = "/api/chat/completions",
+  completionsStream = true,
+  completionsExtraBody,
+  hideSkillsManager = false,
+  autoCreateInitialConversation = true,
+  defaultHeaderTitle = "Code Assistant",
+  emptyStateTitle,
+  emptyStateDescription,
 }: {
   token: string;
   onFilesUpdated?: (files: Record<string, { code: string }>) => void;
   height?: string;
+  completionsPath?: string;
+  completionsStream?: boolean;
+  completionsExtraBody?: Record<string, unknown>;
+  hideSkillsManager?: boolean;
+  autoCreateInitialConversation?: boolean;
+  defaultHeaderTitle?: string;
+  emptyStateTitle?: string;
+  emptyStateDescription?: string;
 }) => {
   const { t } = useTranslation();
   const router = useRouter();
@@ -256,7 +273,7 @@ const ChatPanel = ({
     deleteConversation,
     deleteAllConversations,
     updateConversationTitle,
-  } = useConversations(token, router);
+  } = useConversations(token, router, { autoCreateInitialConversation });
 
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -267,6 +284,9 @@ const ChatPanel = ({
   const [modelLoading, setModelLoading] = useState(false);
   const [channel, setChannel] = useState("aiproxy");
   const [model, setModel] = useState("agent");
+  const [isSkillsOpen, setIsSkillsOpen] = useState(false);
+  const [prefillText, setPrefillText] = useState("");
+  const [prefillVersion, setPrefillVersion] = useState(0);
   const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string; channel: string; icon?: string }>>([
     { value: "agent", label: "agent", channel: "aiproxy" },
   ]);
@@ -625,104 +645,224 @@ const ChatPanel = ({
             };
           });
         };
-
-        await streamFetch({
-          url: `/api/chat/completions`,
-          data: {
-            token,
-            messages: [requestMessage],
-            stream: true,
-            ...(conversationId ? { conversationId } : {}),
-            channel,
-            model,
-          },
-          headers: withAuthHeaders(),
-          abortCtrl,
-          onMessage: (item) => {
-            if (abortCtrl.signal.aborted) return;
-            if (item.event === SseResponseEventEnum.answer) {
-              const answerPayload = item as { text?: string; reasoningText?: string };
-              if (answerPayload.reasoningText) {
-                const reasoningPayload = answerPayload as ReasoningStreamPayload;
-                streamingReasoningRef.current = `${streamingReasoningRef.current}${reasoningPayload.reasoningText}`;
-                scheduleAssistantReasoningFlush(assistantMessageId);
-              }
-              if (answerPayload.text) {
-                streamingTextRef.current = `${streamingTextRef.current}${answerPayload.text}`;
-                scheduleAssistantTextFlush(assistantMessageId);
-              }
-              return;
+        const appendTimelineText = (type: "reasoning" | "answer", text: string) => {
+          if (!text) return;
+          updateAssistantMetadata((current) => {
+            const list = Array.isArray(current.timeline)
+              ? (current.timeline as Array<Record<string, unknown>>)
+              : [];
+            const last = list[list.length - 1];
+            if (last && last.type === type && typeof last.text === "string") {
+              const next = [...list];
+              next[next.length - 1] = {
+                ...last,
+                text: `${last.text}${text}`,
+              };
+              return { ...current, timeline: next };
             }
-            if (item.event === SseResponseEventEnum.toolCall) {
-              const streamPayload = item as ToolStreamPayload;
-              if (streamPayload.id) {
-                upsertToolMessage(streamPayload.id, {
-                  toolName: streamPayload.toolName,
-                  params: "",
-                  response: "",
-                });
-              }
-              return;
-            }
-            if (item.event === SseResponseEventEnum.toolParams) {
-              const streamPayload = item as ToolStreamPayload;
-              if (streamPayload.id) {
-                upsertToolMessage(streamPayload.id, {
-                  toolName: streamPayload.toolName,
-                  params: streamPayload.params || "",
-                });
-              }
-              return;
-            }
-            if (item.event === SseResponseEventEnum.toolResponse) {
-              const streamPayload = item as ToolStreamPayload;
-              if (streamPayload.id) {
-                upsertToolMessage(streamPayload.id, {
-                  toolName: streamPayload.toolName,
-                  params: streamPayload.params || "",
-                  response: streamPayload.response || "",
-                });
-              }
-
-              if (streamPayload.response && onFilesUpdated) {
-                try {
-                  const parsed = JSON.parse(streamPayload.response);
-                  const filesCandidate =
-                    (parsed as { files?: Record<string, { code: string }> }).files ||
-                    (parsed as { data?: { files?: Record<string, { code: string }> } }).data?.files;
-                  const files = toUpdatedFilesMap(filesCandidate);
-                  if (files && typeof files === "object") {
-                    onFilesUpdated(files);
-                  }
-                } catch {
-                  return;
-                }
-              }
-              return;
-            }
-            if (item.event === SseResponseEventEnum.flowNodeResponse) {
-              const streamPayload = item as FlowNodeResponsePayload;
-              updateAssistantMetadata((current) => {
-                const currentResponseData = Array.isArray(current.responseData)
-                  ? current.responseData
-                  : [];
-                return {
-                  ...current,
-                  responseData: [...currentResponseData, streamPayload],
+            return {
+              ...current,
+              timeline: [...list, { type, text }],
+            };
+          });
+        };
+        const upsertTimelineTool = (nextPartial: {
+          id?: string;
+          toolName?: string;
+          params?: string;
+          response?: string;
+        }) => {
+          updateAssistantMetadata((current) => {
+            const list = Array.isArray(current.timeline)
+              ? (current.timeline as Array<Record<string, unknown>>)
+              : [];
+            const toolId = typeof nextPartial.id === "string" ? nextPartial.id : "";
+            if (toolId) {
+              const index = list.findIndex((item) => item.type === "tool" && item.id === toolId);
+              if (index >= 0) {
+                const target = list[index];
+                const next = [...list];
+                next[index] = {
+                  ...target,
+                  id: toolId,
+                  toolName:
+                    typeof nextPartial.toolName === "string" ? nextPartial.toolName : target.toolName,
+                  params: typeof nextPartial.params === "string" ? nextPartial.params : target.params,
+                  response:
+                    typeof nextPartial.response === "string" ? nextPartial.response : target.response,
                 };
-              });
-              return;
+                return { ...current, timeline: next };
+              }
             }
-            if (item.event === SseResponseEventEnum.workflowDuration) {
-              const streamPayload = item as WorkflowDurationPayload;
-              if (typeof streamPayload.durationSeconds !== "number") return;
-              updateAssistantMetadata((current) => ({
-                ...current,
-                durationSeconds: streamPayload.durationSeconds,
-              }));
-            }
-          },
-        });
+            return {
+              ...current,
+              timeline: [
+                ...list,
+                {
+                  type: "tool",
+                  id: toolId || undefined,
+                  toolName: nextPartial.toolName || "",
+                  params: nextPartial.params || "",
+                  response: nextPartial.response || "",
+                },
+              ],
+            };
+          });
+        };
+
+        if (!completionsStream) {
+          const historyMessages = [...messages, requestMessage].map((message) => ({
+            role: message.role,
+            content: extractText(message.content),
+          }));
+          const response = await fetch(completionsPath, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...withAuthHeaders(),
+            },
+            signal: abortCtrl.signal,
+            body: JSON.stringify({
+              token,
+              messages: historyMessages,
+              ...(conversationId ? { conversationId } : {}),
+              channel,
+              model,
+              ...(completionsExtraBody || {}),
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(typeof payload?.error === "string" ? payload.error : "请求失败");
+          }
+          const assistantText =
+            typeof payload?.assistant?.content === "string" ? payload.assistant.content : "已完成";
+          const assistantReasoning =
+            typeof payload?.assistant?.reasoning === "string" ? payload.assistant.reasoning : "";
+          streamingTextRef.current = assistantText;
+          streamingReasoningRef.current = assistantReasoning;
+
+          if (onFilesUpdated) {
+            const files = toUpdatedFilesMap(payload?.files);
+            if (files) onFilesUpdated(files);
+          }
+        } else {
+          await streamFetch({
+            url: completionsPath,
+            data: {
+              token,
+              messages: [requestMessage],
+              stream: true,
+              ...(conversationId ? { conversationId } : {}),
+              channel,
+              model,
+              ...(completionsExtraBody || {}),
+            },
+            headers: withAuthHeaders(),
+            abortCtrl,
+            onMessage: (item) => {
+              if (abortCtrl.signal.aborted) return;
+              if (item.event === SseResponseEventEnum.answer) {
+                const answerPayload = item as { text?: string; reasoningText?: string };
+                if (answerPayload.reasoningText) {
+                  const reasoningText = answerPayload.reasoningText;
+                  streamingReasoningRef.current = `${streamingReasoningRef.current}${reasoningText}`;
+                  scheduleAssistantReasoningFlush(assistantMessageId);
+                  appendTimelineText("reasoning", reasoningText);
+                }
+                if (answerPayload.text) {
+                  streamingTextRef.current = `${streamingTextRef.current}${answerPayload.text}`;
+                  scheduleAssistantTextFlush(assistantMessageId);
+                  appendTimelineText("answer", answerPayload.text);
+                }
+                return;
+              }
+              if (item.event === SseResponseEventEnum.toolCall) {
+                const streamPayload = item as ToolStreamPayload;
+                if (streamPayload.id) {
+                  upsertToolMessage(streamPayload.id, {
+                    toolName: streamPayload.toolName,
+                    params: "",
+                    response: "",
+                  });
+                  upsertTimelineTool({
+                    id: streamPayload.id,
+                    toolName: streamPayload.toolName,
+                  });
+                }
+                return;
+              }
+              if (item.event === SseResponseEventEnum.toolParams) {
+                const streamPayload = item as ToolStreamPayload;
+                if (streamPayload.id) {
+                  upsertToolMessage(streamPayload.id, {
+                    toolName: streamPayload.toolName,
+                    params: streamPayload.params || "",
+                  });
+                  upsertTimelineTool({
+                    id: streamPayload.id,
+                    toolName: streamPayload.toolName,
+                    params: streamPayload.params || "",
+                  });
+                }
+                return;
+              }
+              if (item.event === SseResponseEventEnum.toolResponse) {
+                const streamPayload = item as ToolStreamPayload;
+                if (streamPayload.id) {
+                  upsertToolMessage(streamPayload.id, {
+                    toolName: streamPayload.toolName,
+                    params: streamPayload.params || "",
+                    response: streamPayload.response || "",
+                  });
+                  upsertTimelineTool({
+                    id: streamPayload.id,
+                    toolName: streamPayload.toolName,
+                    params: streamPayload.params || "",
+                    response: streamPayload.response || "",
+                  });
+                }
+
+                if (streamPayload.response && onFilesUpdated) {
+                  try {
+                    const parsed = JSON.parse(streamPayload.response);
+                    const filesCandidate =
+                      (parsed as { files?: Record<string, { code: string }> }).files ||
+                      (parsed as { data?: { files?: Record<string, { code: string }> } }).data?.files;
+                    const files = toUpdatedFilesMap(filesCandidate);
+                    if (files && typeof files === "object") {
+                      onFilesUpdated(files);
+                    }
+                  } catch {
+                    return;
+                  }
+                }
+                return;
+              }
+              if (item.event === SseResponseEventEnum.flowNodeResponse) {
+                const streamPayload = item as FlowNodeResponsePayload;
+                updateAssistantMetadata((current) => {
+                  const currentResponseData = Array.isArray(current.responseData)
+                    ? current.responseData
+                    : [];
+                  return {
+                    ...current,
+                    responseData: [...currentResponseData, streamPayload],
+                  };
+                });
+                return;
+              }
+              if (item.event === SseResponseEventEnum.workflowDuration) {
+                const streamPayload = item as WorkflowDurationPayload;
+                if (typeof streamPayload.durationSeconds !== "number") return;
+                updateAssistantMetadata((current) => ({
+                  ...current,
+                  durationSeconds: streamPayload.durationSeconds,
+                }));
+              }
+            },
+          });
+        }
       } catch (error) {
         if (abortCtrl.signal.aborted) {
           return;
@@ -763,6 +903,9 @@ const ChatPanel = ({
       isSending,
       model,
       channel,
+      completionsExtraBody,
+      completionsPath,
+      completionsStream,
       onFilesUpdated,
       token,
       updateConversationTitle,
@@ -779,6 +922,7 @@ const ChatPanel = ({
     abortCtrl.abort(new Error("stop"));
 
     if (!chatId) return;
+    if (!completionsStream || completionsPath !== "/api/chat/completions") return;
 
     // 后端停止异步执行，避免网络慢导致前端停不下来
     const stopApiAbort = new AbortController();
@@ -798,7 +942,7 @@ const ChatPanel = ({
       .finally(() => {
         clearTimeout(timeout);
       });
-  }, [token]);
+  }, [completionsPath, completionsStream, token]);
 
   const handleRateMessage = useCallback(
     async (messageId: string, nextRating: MessageRating) => {
@@ -905,7 +1049,25 @@ const ChatPanel = ({
     [handleSend, isSending, messages]
   );
 
-  const activeConversationTitle = useMemo(() => activeConversation?.title, [activeConversation?.title]);
+  const activeConversationTitle = useMemo(
+    () => activeConversation?.title || defaultHeaderTitle,
+    [activeConversation?.title, defaultHeaderTitle]
+  );
+
+  const handleUseSkill = useCallback((skillName: string) => {
+    const prompt = `请先调用 skill_load 工具加载技能 "${skillName}"，再按技能流程完成我的需求。`;
+    setPrefillText(prompt);
+    setPrefillVersion((value) => value + 1);
+  }, []);
+
+  const handleCreateSkillViaChat = useCallback(() => {
+    const projectToken = token.startsWith("skill-studio:") ? "" : token;
+    void router.push(
+      projectToken
+        ? `/skills/create?projectToken=${encodeURIComponent(projectToken)}`
+        : "/skills/create"
+    );
+  }, [router, token]);
 
   return (
     <Flex
@@ -931,6 +1093,9 @@ const ChatPanel = ({
         onDeleteAllConversations={() => deleteAllConversations()}
         onDeleteConversation={(id) => deleteConversation(id)}
         onNewConversation={() => createNewConversation()}
+        onOpenSkills={() => {
+          if (!hideSkillsManager) setIsSkillsOpen(true);
+        }}
         onSelectConversation={(id) => loadConversation(id)}
         title={activeConversationTitle}
       />
@@ -953,10 +1118,11 @@ const ChatPanel = ({
             <Flex align="center" color="gray.500" h="full" justify="center">
               <Box textAlign="center">
                 <Text color="myGray.700" fontSize="lg" fontWeight="700">
-                  {t("chat:ready_start", { defaultValue: "准备开始" })}
+                  {emptyStateTitle || t("chat:ready_start", { defaultValue: "准备开始" })}
                 </Text>
                 <Text fontSize="sm" mt={1}>
-                  {t("chat:ready_desc", { defaultValue: "描述你想改的功能，我会直接修改代码" })}
+                  {emptyStateDescription ||
+                    t("chat:ready_desc", { defaultValue: "描述你想改的功能，我会直接修改代码" })}
                 </Text>
               </Box>
             </Flex>
@@ -1000,12 +1166,22 @@ const ChatPanel = ({
           model={model}
           modelLoading={modelLoading}
           modelOptions={modelOptions}
+          prefillText={prefillText}
+          prefillVersion={prefillVersion}
           onChangeModel={setModel}
           onUploadFiles={prepareUploadFiles}
           onSend={handleSend}
           onStop={handleStop}
         />
       </Flex>
+      {!hideSkillsManager ? (
+        <SkillsManagerModal
+          isOpen={isSkillsOpen}
+          onClose={() => setIsSkillsOpen(false)}
+          onCreateViaChat={handleCreateSkillViaChat}
+          onUseSkill={handleUseSkill}
+        />
+      ) : null}
     </Flex>
   );
 };

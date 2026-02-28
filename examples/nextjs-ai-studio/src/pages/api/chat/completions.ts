@@ -4,6 +4,9 @@ import { parseGlobalCommand, runGlobalAction, type ChangeTracker } from "@server
 import { loadMcpTools } from "@server/agent/mcpClient";
 import { BASE_CODING_AGENT_PROMPT } from "@server/agent/prompts/baseCodingAgentPrompt";
 import { getAgentRuntimeConfig } from "@server/agent/runtimeConfig";
+import { buildSkillsCatalogPrompt } from "@server/agent/skills/prompt";
+import { getRuntimeSkills } from "@server/agent/skills/registry";
+import { createSkillLoadTool } from "@server/agent/skills/tool";
 import { createProjectTools } from "@server/agent/tools";
 import type { AgentToolDefinition } from "@server/agent/tools/types";
 import { runSimpleAgentWorkflow } from "@server/agent/workflow/simpleAgentWorkflow";
@@ -270,6 +273,7 @@ const PROJECT_LOCAL_TOOL_NAMES = new Set([
   "search_in_files",
   "compile_project",
   "global",
+  "skill_load",
 ]);
 
 const MCP_TOOL_NAME_PREFIX = "mcp_";
@@ -321,6 +325,7 @@ const routeToolsByIntent = (allTools: AgentToolDefinition[], intent: UserIntent)
         "write_file",
         "compile_project",
         "global",
+        "skill_load",
       ].includes(tool.name)
     );
 
@@ -342,7 +347,8 @@ const routeToolsByIntent = (allTools: AgentToolDefinition[], intent: UserIntent)
 
   if (intent === "coding") {
     const codingTools = allTools.filter(
-      (tool) => PROJECT_LOCAL_TOOL_NAMES.has(tool.name) || isMcpToolName(tool.name)
+      (tool) =>
+        PROJECT_LOCAL_TOOL_NAMES.has(tool.name) || isMcpToolName(tool.name)
     );
 
     if (codingTools.length > 0) {
@@ -598,7 +604,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const tracker: ChangeTracker = { changed: false, paths: new Set() };
   const localTools = createProjectTools(token, tracker);
   const mcpTools = await loadMcpTools();
-  const allTools = [...localTools, ...mcpTools];
+  const runtimeSkills = await getRuntimeSkills();
+  const skillLoadTool = runtimeSkills.length > 0 ? await createSkillLoadTool() : null;
+  const allTools = [
+    ...localTools,
+    ...mcpTools,
+    ...(skillLoadTool ? [skillLoadTool] : []),
+  ];
   const userIntent = detectUserIntent(contextMessages);
   const routedTools = routeToolsByIntent(allTools, userIntent);
   const selectedTools = routedTools.selectedTools;
@@ -699,22 +711,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     }) as ChatCompletionMessageParam[];
 
-  const shouldInjectSkillPrompt = userIntent === "coding" && (hasMcpTools || selectedTools.length === 0);
-  const skillPrompt = shouldInjectSkillPrompt ? await getAgentRuntimeSkillPrompt() : "";
+  const skillsCatalogPrompt =
+    runtimeSkills.length > 0 ? buildSkillsCatalogPrompt(runtimeSkills) : "";
+  const fallbackSkillPrompt =
+    runtimeSkills.length === 0 ? await getAgentRuntimeSkillPrompt() : "";
   const baseAgentMessages = toAgentMessages(contextMessages);
   const systemPrompts: ChatCompletionMessageParam[] = [
     { role: "system", content: BASE_CODING_AGENT_PROMPT },
     { role: "system", content: toolRoutingPrompt },
-    ...(skillPrompt ? [{ role: "system", content: skillPrompt } as ChatCompletionMessageParam] : []),
+    ...(skillsCatalogPrompt
+      ? [{ role: "system", content: skillsCatalogPrompt } as ChatCompletionMessageParam]
+      : []),
+    ...(fallbackSkillPrompt
+      ? [{ role: "system", content: fallbackSkillPrompt } as ChatCompletionMessageParam]
+      : []),
   ];
   const agentMessages = [...systemPrompts, ...baseAgentMessages] as ChatCompletionMessageParam[];
 
   console.info("[agent-skill] injection", {
-    enabled: Boolean(skillPrompt),
-    shouldInjectSkillPrompt,
+    enabled: Boolean(skillsCatalogPrompt || fallbackSkillPrompt),
+    skillsCatalogEnabled: Boolean(skillsCatalogPrompt),
+    fallbackEnabled: Boolean(fallbackSkillPrompt),
+    runtimeSkillCount: runtimeSkills.length,
+    skillLoadToolEnabled: Boolean(skillLoadTool),
     hasMcpTools,
     hasProjectKnowledgeTools,
-    skillPromptLength: skillPrompt.length,
+    skillsCatalogPromptLength: skillsCatalogPrompt.length,
+    fallbackSkillPromptLength: fallbackSkillPrompt.length,
     userIntent,
     routeReason: routedTools.reason,
     toolChoiceMode,

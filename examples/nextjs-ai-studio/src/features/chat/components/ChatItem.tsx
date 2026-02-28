@@ -44,6 +44,14 @@ interface ToolDetail {
   params?: string;
   response?: string;
 }
+interface TimelineItem {
+  type: "reasoning" | "answer" | "tool";
+  text?: string;
+  id?: string;
+  toolName?: string;
+  params?: string;
+  response?: string;
+}
 
 const MAX_TOOL_DETAIL_CHARS = 800;
 
@@ -136,6 +144,24 @@ const getReasoningText = (message: ConversationMessage): string => {
   const value = kwargs.reasoning_text ?? kwargs.reasoning_content;
   return typeof value === "string" ? value : "";
 };
+const getTimelineItems = (message: ConversationMessage): TimelineItem[] => {
+  if (!message.additional_kwargs || typeof message.additional_kwargs !== "object") return [];
+  const value = (message.additional_kwargs as { timeline?: unknown }).timeline;
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      type:
+        item.type === "reasoning" || item.type === "answer" || item.type === "tool"
+          ? item.type
+          : "answer",
+      text: typeof item.text === "string" ? item.text : undefined,
+      id: typeof item.id === "string" ? item.id : undefined,
+      toolName: typeof item.toolName === "string" ? item.toolName : undefined,
+      params: typeof item.params === "string" ? item.params : undefined,
+      response: typeof item.response === "string" ? item.response : undefined,
+    }));
+};
 
 const truncateDetailText = (value?: string) => {
   if (!value) return "";
@@ -166,6 +192,7 @@ const ChatItem = ({
   const files = useMemo(() => getMessageFiles(message), [message]);
   const toolDetails = useMemo(() => getToolDetails(message), [message]);
   const reasoningText = useMemo(() => getReasoningText(message), [message]);
+  const timelineItems = useMemo(() => getTimelineItems(message), [message]);
   const [isReasoningExpanded, setIsReasoningExpanded] = useState(false);
   const [expandedToolKeys, setExpandedToolKeys] = useState<Record<string, boolean>>({});
   const [detailModalData, setDetailModalData] = useState<{ title: string; content: string } | null>(null);
@@ -199,7 +226,7 @@ const ChatItem = ({
   const hasAnswerText = content.trim().length > 0;
   const streamingPhaseText = isStreaming ? (hasAnswerText ? "回复中..." : "思考中...") : "";
   const containsImageMarkdown = isUser ? hasImageInContent(content) : false;
-  if (!content.trim() && !isStreaming && files.length === 0 && toolDetails.length === 0 && !hasReasoning) return null;
+  if (!content.trim() && !isStreaming && files.length === 0 && toolDetails.length === 0 && !hasReasoning && timelineItems.length === 0) return null;
 
   return (
     <Flex justify={isUser ? "flex-end" : "flex-start"} w="full">
@@ -307,6 +334,68 @@ const ChatItem = ({
           </Text>
         ) : (
           <Flex direction="column" gap={2}>
+            {timelineItems.length > 0 ? (
+              <Flex direction="column" gap={2}>
+                {timelineItems.map((item, index) => {
+                  if (item.type === "reasoning") {
+                    return (
+                      <Box
+                        key={`${messageId}-timeline-reasoning-${index}`}
+                        bg="rgba(248,250,252,0.96)"
+                        border="1px solid"
+                        borderColor="rgba(203,213,225,0.92)"
+                        borderRadius="10px"
+                        p={2.5}
+                      >
+                        <Text color="gray.700" fontSize="12px" fontWeight="600" mb={1}>
+                          思考过程
+                        </Text>
+                        <Markdown source={item.text || ""} />
+                      </Box>
+                    );
+                  }
+                  if (item.type === "tool") {
+                    return (
+                      <Box
+                        key={`${messageId}-timeline-tool-${item.id || index}`}
+                        bg="rgba(248,250,252,0.95)"
+                        border="1px solid"
+                        borderColor="rgba(203,213,225,0.9)"
+                        borderRadius="10px"
+                        p={2.5}
+                      >
+                        <Text color="gray.800" fontSize="12px" fontWeight="600" mb={1}>
+                          {item.toolName || `工具 ${index + 1}`}
+                        </Text>
+                        <Box bg="white" border="1px solid" borderColor="gray.200" borderRadius="8px" p={2}>
+                          <Text color="blue.700" fontSize="10px" fontWeight="700" mb={1}>
+                            入参
+                          </Text>
+                          <Text color="gray.600" fontFamily="mono" fontSize="11px" whiteSpace="pre-wrap">
+                            {truncateDetailText(item.params) || "{}"}
+                          </Text>
+                        </Box>
+                        <Box bg="white" border="1px solid" borderColor="gray.200" borderRadius="8px" p={2} mt={2}>
+                          <Text color="green.700" fontSize="10px" fontWeight="700" mb={1}>
+                            出参
+                          </Text>
+                          <Text color="gray.800" fontFamily="mono" fontSize="11px" whiteSpace="pre-wrap">
+                            {truncateDetailText(item.response) || "暂无输出"}
+                          </Text>
+                        </Box>
+                      </Box>
+                    );
+                  }
+                  return (
+                    <Box key={`${messageId}-timeline-answer-${index}`}>
+                      <Markdown source={item.text || ""} />
+                    </Box>
+                  );
+                })}
+              </Flex>
+            ) : null}
+            {timelineItems.length === 0 ? (
+              <>
             {hasReasoning ? (
               <Box
                 bg="rgba(248,250,252,0.96)"
@@ -513,6 +602,8 @@ const ChatItem = ({
               </Flex>
             ) : null}
             {content ? <Markdown source={content} /> : null}
+              </>
+            ) : null}
           </Flex>
         )}
       </Box>

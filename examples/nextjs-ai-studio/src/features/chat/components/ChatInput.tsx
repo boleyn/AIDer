@@ -27,6 +27,8 @@ const ChatInput = ({
   model,
   modelOptions,
   modelLoading,
+  prefillText,
+  prefillVersion,
   onChangeModel,
   onUploadFiles,
   onSend,
@@ -39,6 +41,7 @@ const ChatInput = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const isInputLocked = isSending || isSubmitting;
   const hasUploadingFiles = useMemo(
     () => files.some((item) => item.uploadState === "uploading"),
@@ -80,6 +83,24 @@ const ChatInput = ({
       });
     };
   }, [previewFiles]);
+
+  useEffect(() => {
+    if (!prefillVersion || !prefillText?.trim()) return;
+    setText((prev) => {
+      const current = prev.trim();
+      if (!current) return prefillText.trim();
+      return `${prev}\n${prefillText.trim()}`;
+    });
+    setTimeout(() => {
+      const textarea = textAreaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.style.height = "50px";
+      const nextHeight = Math.min(textarea.scrollHeight, 128);
+      textarea.style.height = `${nextHeight}px`;
+      textarea.style.overflowY = textarea.scrollHeight > 128 ? "auto" : "hidden";
+    }, 0);
+  }, [prefillText, prefillVersion]);
 
   const uploadSingleFile = useCallback(
     async (fileItem: LocalInputFile) => {
@@ -294,6 +315,7 @@ const ChatInput = ({
 
         <Flex align="center" px={2}>
           <Textarea
+            ref={textAreaRef}
             _focusVisible={{ border: "none", boxShadow: "none" }}
             _placeholder={{
               color: "#707070",

@@ -23,6 +23,8 @@ export interface ChatInputProps {
   model: string;
   modelOptions: ChatInputModelOption[];
   modelLoading?: boolean;
+  prefillText?: string;
+  prefillVersion?: number;
   onChangeModel: (model: string) => void;
   onUploadFiles: (files: ChatInputFile[]) => Promise<UploadedFileArtifact[]>;
   onStop?: () => void;

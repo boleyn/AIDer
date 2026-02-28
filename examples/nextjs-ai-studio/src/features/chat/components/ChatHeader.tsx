@@ -2,6 +2,7 @@ import {
   Box,
   Flex,
   IconButton,
+  MenuDivider,
   Menu,
   MenuButton,
   MenuItem,
@@ -9,7 +10,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 
-import { AddIcon, ClockIcon, CloseIcon } from "@/components/common/Icon";
+import { AddIcon, ClockIcon, CloseIcon, SettingsIcon } from "@/components/common/Icon";
 import type { ConversationSummary } from "@/types/conversation";
 
 interface ChatHeaderProps {
@@ -25,6 +26,7 @@ interface ChatHeaderProps {
   onDeleteAllConversations?: () => void;
   onReset?: () => void;
   onNewConversation?: () => void;
+  onOpenSkills?: () => void;
 }
 
 const ChatHeader = ({
@@ -36,6 +38,7 @@ const ChatHeader = ({
   onDeleteAllConversations,
   onReset,
   onNewConversation,
+  onOpenSkills,
 }: ChatHeaderProps) => {
   return (
     <Flex
@@ -58,6 +61,16 @@ const ChatHeader = ({
       </Box>
 
       <Flex gap={1}>
+        <IconButton
+          _hover={{ bg: "myGray.100" }}
+          aria-label="Skills"
+          borderRadius="10px"
+          icon={<SettingsIcon />}
+          onClick={onOpenSkills}
+          size="sm"
+          variant="ghost"
+        />
+
         <Menu placement="bottom-end">
           <MenuButton
             _hover={{ bg: "myGray.100" }}
@@ -101,18 +114,21 @@ const ChatHeader = ({
               ))
             )}
             {conversations.length > 0 && (
-              <MenuItem
-                borderRadius="md"
-                color="red.500"
-                fontWeight="700"
-                onClick={() => {
-                  if (window.confirm("确定要清空所有历史记录吗？")) {
-                    onDeleteAllConversations?.();
-                  }
-                }}
-              >
-                清空所有历史记录
-              </MenuItem>
+              <>
+                <MenuDivider />
+                <MenuItem
+                  borderRadius="md"
+                  color="red.500"
+                  fontWeight="700"
+                  onClick={() => {
+                    if (window.confirm("确定要清空所有历史记录吗？")) {
+                      onDeleteAllConversations?.();
+                    }
+                  }}
+                >
+                  清空所有历史记录
+                </MenuItem>
+              </>
             )}
           </MenuList>
         </Menu>

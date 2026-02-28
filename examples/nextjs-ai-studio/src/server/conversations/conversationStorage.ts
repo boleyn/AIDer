@@ -215,11 +215,20 @@ export async function listConversations(token: string): Promise<ConversationSumm
     .sort({ top: -1, updateTime: -1 })
     .limit(MAX_LIST_CONVERSATIONS)
     .toArray();
-  const summaries = docs.map(toSummary);
   const itemCol = await getItemCollection();
+  const chatIds = docs.map((doc) => doc.chatId).filter(Boolean);
+  if (chatIds.length === 0) return [];
+  const nonEmptyChatIds = new Set(
+    await itemCol.distinct("chatId", {
+      token,
+      chatId: { $in: chatIds },
+    })
+  );
+  const filteredDocs = docs.filter((doc) => nonEmptyChatIds.has(doc.chatId));
+  const summaries = filteredDocs.map(toSummary);
 
   await Promise.all(
-    docs.map(async (doc, index) => {
+    filteredDocs.map(async (doc, index) => {
       const summary = summaries[index];
       const chatId = doc.chatId;
       if (!chatId || summary.title !== "历史记录") return;

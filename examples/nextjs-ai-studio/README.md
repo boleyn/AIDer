@@ -66,6 +66,41 @@ MCP_SERVER_URLS=[{"name":"mcp-private","url":"https://example.com/sse","headers"
 /global {"action":"read","path":"/App.js"}
 ```
 
+## Agent Skills（项目内）
+
+支持在仓库 `skills/` 目录下定义可复用技能，并在对话中按需加载（OpenCode/Codex 风格）：
+
+- 目录规范：`skills/<skill-name>/SKILL.md`
+- `SKILL.md` frontmatter 必填：
+  - `name`：必须与目录名一致，正则 `^[a-z0-9]+(-[a-z0-9]+)*$`
+  - `description`：1-1024 字符
+- 可选字段：`license`、`compatibility`、`metadata`
+
+运行时行为：
+
+- 有可用 skills 时，系统提示会注入 `<available_skills>` 摘要列表
+- 模型通过 `skill_load` 工具按名称显式加载 skill 正文
+- 如果未发现任何 skills，会回退到旧配置 `AGENT_SKILL_FILE`（兼容模式）
+
+管理 API（需登录）：
+
+- `GET /api/agent/skills`：列出已发现 skills 与校验状态
+- `GET /api/agent/skills/[name]`：查看单个 skill 详情与正文
+- `POST /api/agent/skills/validate`：校验全部或指定 skill（body/query 传 `name`）
+- `POST /api/agent/skills/reload`：清缓存并重新扫描
+- `POST /api/agent/skills/create`：创建新 skill（`name` + `description`，可选 `body`）
+- `POST /api/agent/skills/install-skill-creator`：安装内置 `skill-creator` 到项目 `skills/skill-creator/SKILL.md`
+
+Skill 创建工作台（独立流程）：
+
+- 路由：`/skills/create`
+- 交互：左侧对话、右侧 workspace 文件预览
+- 存储：`data/skill-workspaces/<workspaceId>/`（与项目 `data/projects/*` 隔离）
+- API：
+  - `POST /api/skills/workspaces/create`
+  - `GET /api/skills/workspaces/[workspaceId]/files`
+  - `POST /api/skills/chat/completions`
+
 ## API 返回格式
 
 `/api/code?token=<token>` 返回示例：
